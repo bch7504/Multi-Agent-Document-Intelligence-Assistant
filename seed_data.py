@@ -1,218 +1,288 @@
-import os
 import json
+import os
+import re
+from pathlib import Path
+from uuid import uuid4
+
+from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_milvus import Milvus
-from langchain_core.documents import Document
-from dotenv import load_dotenv
-from uuid import uuid4
-from crawl import crawl_web
 from langchain_ollama import OllamaEmbeddings
 from pymilvus import MilvusClient, connections
 
+from crawl import crawl_web
 
-load_dotenv()
 
-def _ensure_orm_connection(vectorstore: Milvus):
-    """
-    Workaround cho bug langchain-milvus 0.3.3 + pymilvus 2.6.x:
-    MilvusClient tạo connection nội bộ nhưng không đăng ký với pymilvus ORM,
-    nên Collection() không tìm thấy alias và raise ConnectionNotExistException.
-    Hàm này đăng ký ORM connection với alias mà MilvusClient đang dùng.
-    """
+HUGGINGFACE_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+OLLAMA_EMBEDDING_MODEL = "nomic-embed-text"
+EMBEDDING_DESCRIPTION_PREFIX = "embedding_model="
+COLLECTION_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,254}$")
+MILVUS_INSERT_BATCH_SIZE = 100
+METADATA_TEXT_LIMITS = {
+    "source": 2_048,
+    "content_type": 255,
+    "title": 1_000,
+    "description": 4_000,
+    "language": 32,
+    "doc_name": 255,
+}
+
+
+def _validate_collection_name(collection_name: str) -> str:
+    collection_name = collection_name.strip()
+    if not COLLECTION_NAME_PATTERN.fullmatch(collection_name):
+        raise ValueError(
+            "Collection name must start with a letter or underscore, contain only "
+            "letters, numbers, and underscores, and be at most 255 characters"
+        )
+    return collection_name
+
+
+def _embedding_model_name(use_ollama: bool) -> str:
+    if use_ollama:
+        return f"ollama:{OLLAMA_EMBEDDING_MODEL}"
+    return f"huggingface:{HUGGINGFACE_EMBEDDING_MODEL}"
+
+
+def _get_embeddings(use_ollama: bool):
+    if use_ollama:
+        return OllamaEmbeddings(model=OLLAMA_EMBEDDING_MODEL)
+    return HuggingFaceEmbeddings(model_name=HUGGINGFACE_EMBEDDING_MODEL)
+
+
+def _ensure_orm_connection_for_uri(uri: str) -> None:
+    """Register the alias that MilvusClient will assign before Milvus uses ORM."""
+    client = MilvusClient(uri=uri)
+    try:
+        alias = client._using
+    finally:
+        client.close()
+    if not connections.has_connection(alias):
+        connections.connect(alias=alias, uri=uri)
+
+
+def _ensure_orm_connection(vectorstore: Milvus) -> None:
+    """Register the client connection for langchain-milvus 0.3.x ORM calls."""
     alias = vectorstore.alias
-    # Kiểm tra xem alias đã được đăng ký trong ORM chưa
-    if alias not in connections.list_connections() or not connections.has_connection(alias):
-        # Lấy URI từ connection_args
+    if not connections.has_connection(alias):
         uri = vectorstore._connection_args.get("uri", "http://localhost:19530")
         connections.connect(alias=alias, uri=uri)
 
-def _get_embeddings(use_ollama: bool):
-    """Khởi tạo model embeddings dựa trên lựa chọn"""
-    if use_ollama:
-        return OllamaEmbeddings(
-            model="nomic-embed-text"  
+
+def _collection_description(use_ollama: bool) -> str:
+    return f"RAG documents; {EMBEDDING_DESCRIPTION_PREFIX}{_embedding_model_name(use_ollama)}"
+
+
+def _embedding_from_description(description: str | None) -> str | None:
+    if not description or EMBEDDING_DESCRIPTION_PREFIX not in description:
+        return None
+    return description.split(EMBEDDING_DESCRIPTION_PREFIX, 1)[1].split(";", 1)[0].strip()
+
+
+def _temporary_collection_name(collection_name: str, kind: str) -> str:
+    suffix = f"__{kind}_{uuid4().hex[:10]}"
+    return f"{collection_name[: 255 - len(suffix)]}{suffix}"
+
+
+def _bounded_metadata_text(value, field: str, fallback: str = "") -> str:
+    text = str(value or fallback)
+    return text[: METADATA_TEXT_LIMITS[field]]
+
+
+def _replace_collection_safely(
+    uri: str,
+    collection_name: str,
+    documents: list[Document],
+    use_ollama: bool,
+) -> Milvus:
+    """Build a staging collection, then promote it with rollback on rename failure."""
+    collection_name = _validate_collection_name(collection_name)
+    if not documents:
+        raise ValueError("No non-empty documents were supplied for indexing")
+
+    staging_name = _temporary_collection_name(collection_name, "staging")
+    backup_name = _temporary_collection_name(collection_name, "backup")
+    manager = MilvusClient(uri=uri)
+    staging_promoted = False
+    backup_created = False
+
+    try:
+        _ensure_orm_connection_for_uri(uri)
+        vectorstore = Milvus(
+            embedding_function=_get_embeddings(use_ollama),
+            connection_args={"uri": uri},
+            collection_name=staging_name,
+            collection_description=_collection_description(use_ollama),
+            drop_old=False,
         )
-    else: 
-        return HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
-        )
-
-def _drop_collection_if_exists(uri: str, collection_name: str):
-    """Xóa collection cũ nếu đã tồn tại (workaround bug drop_old langchain-milvus 0.3.x)"""
-    client = MilvusClient(uri=uri)
-    if client.has_collection(collection_name):
-        client.drop_collection(collection_name)
-        print(f'Dropped old collection: {collection_name}')
-    client.close()
-
-def load_data_from_local_file(filename: str, directory: str) -> tuple:
-    """
-    Hàm đọc dữ liệu từ file JSON local
-    Args:
-        filename: str: Tên file JSON cần đọc (vd: data.json)
-        directory: str: Thư mục chứa file ( vd: data_v3)
-    Returns: 
-        tuple: Trả về (data,doc_name) trong đó:
-            - data: Dữ liệu JSON đã được parse
-            - doc_name: Tên file đã được xử lý (bỏ đuôi .json và thay '_' bằng khoảng trống)
-    """
-    file_path = os.path.join(directory, filename)
-    with open(file_path, 'r', encoding='utf-8') as file:
-        data = json.load(file)
-    print(f'Data loaded from {file_path}')
-    # Chuyển tên file thành tên tài liệu (bỏ đuôi .json và thay '_' bằng khoảng trống)
-    return data, filename.rsplit('.', 1)[0].replace('_', ' ')
-
-def seed_milvus(URL_link: str, collection_name: str, filename: str, directory: str,use_ollama:bool=False):
-    """
-    Hàm tạo và lưu vectors embeddings vào Milvus từ dữ liệu local
-    Args:
-        URl_link: str: Đường dẫn đến Milvus server (ví dụ: "http://localhost:19530")
-        collection_name: str: Tên collection trong Milvus để lưu dữ liệu
-        filename: str: Tên file chứa dữ liệu
-        directory: str: Đường dẫn đến thư mục chứa file dữ liệu
-    Returns:
-        Milvus : Đối tượng đã được khởi tạo chưa các vectors embeddings
-    Chú ý:
-        - Sử dụng model "text-embedding-3-large" để tạo embeddings
-        - Collection cũ sẽ bị xóa nếu đã tồn tại (drop_collection=true)
-    """
-    # Khởi tạo model embeddings
-    embeddings = _get_embeddings(use_ollama)
-    # Đọc dữ liệu từ file local
-    local_data, doc_name = load_data_from_local_file(filename, directory)
-    #Chuyển đổi dữ liệu thành danh sách các Document với giá trị mặc định cho các trường
-    documents = [
-        Document(
-            page_content=doc.get("page_content") or "",
-            metadata = {
-                "source": doc['metadata'].get("source", doc_name),
-                'content_type': doc['metadata'].get("content_type") or 'text/plain',
-                'title': doc['metadata'].get("title") or "",
-                'description': doc['metadata'].get("description") or "",
-                'language': doc['metadata'].get("language") or "en",
-                'doc_name': doc_name, # biết được file nào để dễ xóa
-                'start_index': doc['metadata'].get("start_index") or 0,
-                }
+        _ensure_orm_connection(vectorstore)
+        for start in range(0, len(documents), MILVUS_INSERT_BATCH_SIZE):
+            batch = documents[start : start + MILVUS_INSERT_BATCH_SIZE]
+            vectorstore.add_documents(
+                documents=batch,
+                ids=[str(uuid4()) for _ in batch],
             )
-            for doc in local_data
-        ]
-    print(f'Loaded {len(documents)} documents')
-    
-    # Tạo id duy nhất cho mỗi document
-    uuids = [str(uuid4()) for _ in range(len(documents))]
-    
-    # Xóa collection cũ trước (workaround bug drop_old trong langchain-milvus 0.3.x)
-    _drop_collection_if_exists(URL_link, collection_name)
-    
-    # Khởi tạo Milvus vectorstore (không dùng drop_old=True để tránh bug)
-    vectorstore = Milvus(
-        embedding_function=embeddings,
-        connection_args={"uri": URL_link},
-        collection_name=collection_name,
-        drop_old=False
-    )
-    # Đăng ký ORM connection để tránh ConnectionNotExistException
-    _ensure_orm_connection(vectorstore)
-    # Thêm documents vào vectorstore
-    vectorstore.add_documents(documents, ids=uuids)
-    print('vector:', vectorstore)
-    return vectorstore
+        vectorstore.client.close()
 
-def seed_milvus_live(url: str, URL_link: str, collection_name: str, doc_name: str,use_ollama:bool=False )-> Milvus:
-    """
-    Hàm crawl dữ liệu trực tiếp từ URL và lưu vectors embeddings vào Milvus
-    Args:
-        url: str: URL cần crawl dữ liệu
-        URl_link: str: Đường dẫn đến Milvus server (ví dụ: "http://localhost:19530")
-        collection_name: str: Tên collection trong Milvus để lưu dữ liệu
-        doc_name: str: Tên tài liệu để lưu trong metadata của các document
-    Returns:
-        Milvus : Đối tượng đã được khởi tạo chưa các vectors embeddings
-    Chú ý:
-        - Sử dụng hàm crawl_web để lấy dữ liệu từ URL
-        - Tự động gán metadata mặc định cho các trường thiếu
-    """
-    # Khởi tạo model embeddings
-    embeddings = _get_embeddings(use_ollama)
+        if manager.has_collection(collection_name):
+            manager.rename_collection(collection_name, backup_name)
+            backup_created = True
 
-    # Đọc dữ liệu từ URL trực tiếp
+        try:
+            manager.rename_collection(staging_name, collection_name)
+            staging_promoted = True
+        except Exception:
+            if backup_created and not manager.has_collection(collection_name):
+                manager.rename_collection(backup_name, collection_name)
+                backup_created = False
+            raise
+
+        if backup_created:
+            try:
+                manager.drop_collection(backup_name)
+                backup_created = False
+            except Exception as cleanup_error:
+                print(f"Warning: could not remove backup collection '{backup_name}': {cleanup_error}")
+    except Exception:
+        if not staging_promoted and manager.has_collection(staging_name):
+            manager.drop_collection(staging_name)
+        raise
+    finally:
+        manager.close()
+
+    return connect_to_milvus(uri, collection_name, use_ollama=use_ollama)
+
+
+def load_data_from_local_file(filename: str, directory: str) -> tuple[list[dict], str]:
+    file_path = Path(directory) / filename
+    with file_path.open("r", encoding="utf-8") as file:
+        data = json.load(file)
+    if not isinstance(data, list):
+        raise ValueError("The JSON root must be a list of documents")
+    return data, Path(filename).stem.replace("_", " ")
+
+
+def _documents_from_local_data(local_data: list[dict], doc_name: str) -> list[Document]:
+    documents: list[Document] = []
+    for index, item in enumerate(local_data):
+        if not isinstance(item, dict):
+            raise ValueError(f"Document at index {index} must be a JSON object")
+        metadata = item.get("metadata") or {}
+        if not isinstance(metadata, dict):
+            raise ValueError(f"metadata at index {index} must be a JSON object")
+
+        page_content = item.get("page_content") or ""
+        if not isinstance(page_content, str):
+            raise ValueError(f"page_content at index {index} must be a string")
+        if not page_content.strip():
+            continue
+
+        documents.append(
+            Document(
+                page_content=page_content,
+                metadata={
+                    "source": _bounded_metadata_text(
+                        metadata.get("source"), "source", doc_name
+                    ),
+                    "content_type": _bounded_metadata_text(
+                        metadata.get("content_type"), "content_type", "text/plain"
+                    ),
+                    "title": _bounded_metadata_text(metadata.get("title"), "title"),
+                    "description": _bounded_metadata_text(
+                        metadata.get("description"), "description"
+                    ),
+                    "language": _bounded_metadata_text(
+                        metadata.get("language"), "language", "en"
+                    ),
+                    "doc_name": _bounded_metadata_text(doc_name, "doc_name"),
+                    "start_index": metadata.get("start_index") or 0,
+                },
+            )
+        )
+    return documents
+
+
+def seed_milvus(
+    URL_link: str,
+    collection_name: str,
+    filename: str,
+    directory: str,
+    use_ollama: bool = False,
+) -> Milvus:
+    local_data, doc_name = load_data_from_local_file(filename, directory)
+    documents = _documents_from_local_data(local_data, doc_name)
+    return _replace_collection_safely(URL_link, collection_name, documents, use_ollama)
+
+
+def seed_milvus_live(
+    url: str,
+    URL_link: str,
+    collection_name: str,
+    doc_name: str,
+    use_ollama: bool = False,
+) -> Milvus:
     documents = crawl_web(url)
-    
-    #cập nhật metadata cho mỗi document với giá trị mặc định
-    for doc in documents:
-        metadata = {
-            'source': doc.metadata.get("source") or "",
-            'content_type': doc.metadata.get("content_type") or 'text/plain',
-            'title': doc.metadata.get("title") or "",
-            'description': doc.metadata.get("description") or "",
-            'language': doc.metadata.get("language") or "en",
-            'doc_name': doc_name, # biết được file nào để dễ xóa
-            'start_index': doc.metadata.get("start_index") or 0,
-            
-        }
-        doc.metadata.update(metadata)
-    
-    uuids = [str(uuid4()) for _ in range(len(documents))]
+    for document in documents:
+        document.metadata.update(
+            {
+                "source": _bounded_metadata_text(
+                    document.metadata.get("source"), "source"
+                ),
+                "content_type": _bounded_metadata_text(
+                    document.metadata.get("content_type"), "content_type", "text/plain"
+                ),
+                "title": _bounded_metadata_text(
+                    document.metadata.get("title"), "title"
+                ),
+                "description": _bounded_metadata_text(
+                    document.metadata.get("description"), "description"
+                ),
+                "language": _bounded_metadata_text(
+                    document.metadata.get("language"), "language", "en"
+                ),
+                "doc_name": _bounded_metadata_text(doc_name, "doc_name"),
+                "start_index": document.metadata.get("start_index") or 0,
+            }
+        )
+    return _replace_collection_safely(URL_link, collection_name, documents, use_ollama)
 
-    # Xóa collection cũ trước (workaround bug drop_old trong langchain-milvus 0.3.x)
-    _drop_collection_if_exists(URL_link, collection_name)
-    
-    # Khởi tạo Milvus vectorstore (không dùng drop_old=True để tránh bug)
+
+def connect_to_milvus(
+    URL_link: str,
+    collection_name: str,
+    use_ollama: bool = False,
+) -> Milvus:
+    collection_name = _validate_collection_name(collection_name)
+    client = MilvusClient(uri=URL_link)
+    try:
+        if not client.has_collection(collection_name):
+            raise ValueError(f"Collection '{collection_name}' does not exist")
+        description = client.describe_collection(collection_name).get("description")
+    finally:
+        client.close()
+
+    expected_embedding = _embedding_model_name(use_ollama)
+    actual_embedding = _embedding_from_description(description)
+    if actual_embedding and actual_embedding != expected_embedding:
+        raise ValueError(
+            f"Collection '{collection_name}' uses '{actual_embedding}', but the query is "
+            f"configured for '{expected_embedding}'"
+        )
+
+    _ensure_orm_connection_for_uri(URL_link)
     vectorstore = Milvus(
-        embedding_function=embeddings,
+        embedding_function=_get_embeddings(use_ollama),
         connection_args={"uri": URL_link},
         collection_name=collection_name,
-        drop_old=False
     )
-    # Đăng ký ORM connection để tránh ConnectionNotExistException
-    _ensure_orm_connection(vectorstore)
-    # Thêm documents vào Milvus
-    vectorstore.add_documents(documents=documents, ids=uuids)
-    print('vector:', vectorstore)
-    return vectorstore
-
-def connect_to_milvus(URL_link: str, collection_name: str,use_ollama=False) -> Milvus:
-    """
-    Hàm kết nối đến colection đã có sẵn trong Milvus
-    Args:
-        URl_link: str: Đường dẫn đến Milvus server (ví dụ: "http://localhost:19530")
-        collection_name: str: Tên collection trong Milvus để kết nối
-    Returns:
-        Milvus : Đối tượng đã được kết nối, sẵn sàng để truy vấn
-    Chú ý:
-        - Không tạo collection mới hoặc xóa dữ liệu cũ
-        - sử dụng model "nomic-embed-text" và "sentence-transformers/all-MiniLM-L6-v2" để tạo embeddings khi truy vấn
-        
-    """
-    embeddings = _get_embeddings(use_ollama)
-
-    # Khởi tạo cấu hình Milvus
-    vectorstore = Milvus(
-        embedding_function=embeddings,
-        connection_args={"uri": URL_link},
-        collection_name=collection_name
-    )
-    # Đăng ký ORM connection để tránh ConnectionNotExistException
     _ensure_orm_connection(vectorstore)
     return vectorstore
-def main():
-    """
-    Hàm chính để kiểm thử các chức năng của module
-    Thực hiện:
-        1. Test seed_data với dữ liệu file từ local 'stack.json'
-        2. (Đã commeemt) Test seed_milvus_live với dữ liệu từ URL 'http://www.stack-ai.com/docs'
-    Chú ý:
-        - Đảm bảo Milvus server đang chạy tại localhost:19530
-        - Các biến môi trường cần thiết đã được cấu hình (ví dụ: OPENAI_API_KEY)
-    """
-    
-    # Test seed_data với dữ liệu file từ local 'stack.json'
-    seed_milvus("http://localhost:19530", "data_test", "stack_ai.json", "data",use_ollama=False)
-    # Test seed_milvus_live với dữ liệu từ URL 'http://www.stack-ai.com/docs'       
-    # seed_milvus_live("http://www.stack-ai.com/docs", "http://localhost:19530", "data_test_live_v2", "stack_ai")
 
-#Chạy main () nếu file được thực thi trực tiếp 
+
+def main() -> None:
+    milvus_uri = os.getenv("MILVUS_URI", "http://localhost:19530")
+    seed_milvus(milvus_uri, "data_test", "stack_ai.json", "data", use_ollama=False)
+
+
 if __name__ == "__main__":
     main()
-    

@@ -1,10 +1,47 @@
 import os
 import re
 import json
+from urllib.parse import urlparse
+
+os.environ.setdefault("USER_AGENT", "RAG-LangChain/1.0")
+
 from langchain_community.document_loaders import RecursiveUrlLoader, WebBaseLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from bs4 import BeautifulSoup
-from dotenv import load_dotenv
+
+
+DEFAULT_HEADERS = {"User-Agent": os.environ["USER_AGENT"]}
+DEFAULT_DOCUMENTATION_URL = "https://docs.stackai.com/llms-full.txt"
+CRAWL_EXCLUDED_PATHS = ("~gitbook/image", "spaces/", "files/")
+
+
+def _validate_url(url: str) -> str:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("URL must be an absolute http:// or https:// URL")
+    return url
+
+
+def _crawl_exclude_dirs(url: str) -> tuple[str, ...]:
+    parsed = urlparse(_validate_url(url))
+    base_url = f"{parsed.scheme}://{parsed.netloc}/"
+    return tuple(f"{base_url}{path}" for path in CRAWL_EXCLUDED_PATHS)
+
+
+def metadata_extractor(raw_content: str, url: str, response) -> dict:
+    content_type = response.headers.get("Content-Type", "")
+    metadata = {"source": url, "content_type": content_type}
+    if "html" not in content_type.lower():
+        return metadata
+
+    soup = BeautifulSoup(raw_content, "html.parser")
+    if title := soup.find("title"):
+        metadata["title"] = title.get_text(strip=True)[:1_000]
+    if description := soup.find("meta", attrs={"name": "description"}):
+        metadata["description"] = str(description.get("content") or "")[:4_000]
+    if html := soup.find("html"):
+        metadata["language"] = str(html.get("lang") or "")[:32]
+    return metadata
 
 def bs4_extractor( html:str) -> str:
     """
@@ -15,11 +52,22 @@ def bs4_extractor( html:str) -> str:
         str: Văn bản đã dược làm sạch, loại bỏ các thẻ HTML và khoảng trắng thừa
     """
     soup = BeautifulSoup(html, 'html.parser') # phân tích cú pháp HTML
-    return re.sub(r'\n\n+',"\n\n", soup.text).strip() # Xóa các khoảng trắng thừa và dòng trống thừa
+    text = soup.get_text(separator="\n")
+    return re.sub(r'\n\n+',"\n\n", text).strip() # Xóa các khoảng trắng thừa và dòng trống thừa
     
 def crawl_web(url_data):
     #Tạo loader với độ sâu tối đa là 4 cấp
-    loader = RecursiveUrlLoader(url=url_data,extractor=bs4_extractor, max_depth=4)
+    loader = RecursiveUrlLoader(
+        url=_validate_url(url_data),
+        extractor=bs4_extractor,
+        metadata_extractor=metadata_extractor,
+        max_depth=4,
+        exclude_dirs=_crawl_exclude_dirs(url_data),
+        prevent_outside=True,
+        timeout=20,
+        headers=DEFAULT_HEADERS,
+        check_response_status=True,
+    )
     docs = loader.load()# tải nội dung
     print('length:', len(docs)) # in số lượng tài liệu đã tải
     
@@ -41,7 +89,11 @@ def web_base_loader(url_data):
     Returns:
         list: Danh sách các Document đã được chia nhỏ
     """
-    loader = WebBaseLoader(url_data)
+    loader = WebBaseLoader(
+        _validate_url(url_data),
+        header_template=DEFAULT_HEADERS,
+        raise_for_status=True,
+    )
     docs = loader.load()
     print('length:', len(docs)) # in số lượng tài liệu đã tải
     
@@ -65,7 +117,7 @@ def save_data_locally(documents, filename, directory):
         None: Hàm không trả về giá trị gì chỉ lưu và in thông báo
     """
     if not os.path.exists(directory):
-        os.makedirs(directory) # tạo thư mục nếu chưa tồn tại
+        os.makedirs(directory, exist_ok=True) # tạo thư mục nếu chưa tồn tại
     file_path = os.path.join(directory, filename)
     
     # Chuyển đổi danh sách Document thành danh sách dict để lưu vào JSON
@@ -89,10 +141,10 @@ def main():
     3. In ra kết quả crawl để kiểm tra 
     """
     # Crawl dữ liệu từ web stack-ai
-    data = crawl_web("https://www.stack-ai.com/docs")
+    data = crawl_web(DEFAULT_DOCUMENTATION_URL)
     # Lưu dữ liệu vào thư mục data
     save_data_locally(data, "stack_ai.json", "data")
-    print('data: ', data) # in dữ liệu được chạy trực tiếp
+    print(f"Crawled and saved {len(data)} chunks")
 
 if __name__ == "__main__":
     main()

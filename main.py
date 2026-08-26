@@ -1,205 +1,249 @@
-import streamlit as st  # Thư viện tạo giao diện web
-from dotenv import load_dotenv  # Đọc file .env chứa API key
-from seed_data import seed_milvus, seed_milvus_live  # Hàm xử lý dữ liệu
-from agent import get_retriever, get_llm_and_agent
-from langchain_core.messages import HumanMessage, AIMessage
-from langchain_community.chat_message_histories import StreamlitChatMessageHistory
-from langchain_community.callbacks.streamlit import StreamlitCallbackHandler
+import os
 
-def setup_sidebar():
-    """
-    Hàm tạo thanh công cụ tùy chọn
-    """
-    with st.sidebar:
-        st.title(" Cấu hình")
+import streamlit as st
+from dotenv import load_dotenv
 
-        #Phần 1: Chọn embedding model
-        st.header("Embedding model")
-        embeddings_choice = st.radio(
-            "Chọn embedding model",
-            ["Ollama","HuggingFace"]
+from agent import (
+    DEFAULT_OPENROUTER_MODEL,
+    get_llm_and_agent,
+    get_retriever,
+    invoke_agent,
+)
+from crawl import DEFAULT_DOCUMENTATION_URL
+from seed_data import seed_milvus, seed_milvus_live
+
+
+load_dotenv()
+
+MILVUS_URI = os.getenv("MILVUS_URI", "http://localhost:19530")
+EMBEDDING_OPTIONS = ("HuggingFace", "Ollama")
+LLM_PRESETS = {
+    "Gemini 2.5 Flash": "gemini",
+    "GPT-5.6 Luna (OpenRouter)": "openrouter",
+    "Qwen2.5 7B (Local)": "ollama",
+}
+
+
+def _default_llm_preset() -> str:
+    if os.getenv("GOOGLE_API_KEY"):
+        return "Gemini 2.5 Flash"
+    if os.getenv("OPENROUTER_API_KEY"):
+        return "GPT-5.6 Luna (OpenRouter)"
+    return "Qwen2.5 7B (Local)"
+
+
+@st.cache_resource(show_spinner=False, max_entries=12)
+def get_cached_agent(
+    collection_name: str,
+    embedding_choice: str,
+    llm_choice: str,
+    openrouter_model: str,
+):
+    use_ollama_embeddings = embedding_choice == "Ollama"
+    retriever = get_retriever(
+        collection_name,
+        use_ollama_embeddings=use_ollama_embeddings,
+        milvus_uri=MILVUS_URI,
+    )
+    return get_llm_and_agent(
+        retriever,
+        llm_choice=llm_choice,
+        openrouter_model=openrouter_model or None,
+    )
+
+
+def handle_local_file(use_ollama_embeddings: bool) -> None:
+    with st.form("local_seed_form"):
+        collection_name = st.text_input("Tên collection trong Milvus", "data_test")
+        filename = st.text_input("Tên file JSON", "stack_ai.json")
+        directory = st.text_input("Thư mục chứa file", "data")
+        submitted = st.form_submit_button(
+            "Tải dữ liệu từ file",
+            icon=":material/upload_file:",
         )
-        use_ollama = embeddings_choice == "Ollama"
-        #Phần 2: Chọn nguồn dữ liệu
-        st.header("Nguồn dữ liệu")
-        data_source = st.radio(
-            "Chọn nguồn dữ liệu:",
-            ["File local","URL trực tiếp"]
+
+    if not submitted:
+        return
+    if not collection_name.strip():
+        st.error("Vui lòng nhập tên collection.")
+        return
+
+    with st.spinner("Đang tạo embeddings và cập nhật collection..."):
+        try:
+            seed_milvus(
+                MILVUS_URI,
+                collection_name,
+                filename,
+                directory,
+                use_ollama=use_ollama_embeddings,
+            )
+            get_cached_agent.clear()
+            st.success(f"Đã cập nhật collection '{collection_name}' an toàn.")
+        except Exception as error:
+            st.error(f"Không thể tải dữ liệu: {error}")
+
+
+def handle_url_input(use_ollama_embeddings: bool) -> None:
+    with st.form("url_seed_form"):
+        collection_name = st.text_input("Tên collection trong Milvus", "data_test_live")
+        url = st.text_input("URL cần crawl", DEFAULT_DOCUMENTATION_URL)
+        submitted = st.form_submit_button(
+            "Crawl dữ liệu",
+            icon=":material/language:",
+        )
+
+    if not submitted:
+        return
+    if not collection_name.strip() or not url.strip():
+        st.error("Vui lòng nhập collection và URL.")
+        return
+
+    with st.spinner("Đang crawl, tạo embeddings và cập nhật collection..."):
+        try:
+            seed_milvus_live(
+                url,
+                MILVUS_URI,
+                collection_name,
+                "stack-ai",
+                use_ollama=use_ollama_embeddings,
+            )
+            get_cached_agent.clear()
+            st.success(f"Đã cập nhật collection '{collection_name}' an toàn.")
+        except Exception as error:
+            st.error(f"Không thể crawl dữ liệu: {error}")
+
+
+def setup_sidebar() -> tuple[str, str, str, str]:
+    with st.sidebar:
+        st.title("Cấu hình")
+
+        embedding_choice = st.segmented_control(
+            "Embedding model",
+            EMBEDDING_OPTIONS,
+            default="HuggingFace",
+            key="embedding_choice",
+        )
+        use_ollama_embeddings = embedding_choice == "Ollama"
+
+        llm_options = tuple(LLM_PRESETS)
+        llm_preset = st.selectbox(
+            "LLM model",
+            llm_options,
+            index=llm_options.index(_default_llm_preset()),
+            key="llm_choice",
+        )
+        llm_choice = LLM_PRESETS[llm_preset]
+        openrouter_model = (
+            DEFAULT_OPENROUTER_MODEL
+            if llm_choice == "openrouter"
+            else ""
+        )
+
+        collection_to_query = st.text_input(
+            "Collection để truy vấn",
+            "data_test",
+            help="Embedding model phải trùng với model đã dùng khi seed collection.",
+        ).strip()
+
+        if st.button("Làm mới agent", icon=":material/refresh:"):
+            get_cached_agent.clear()
+            st.success("Đã xóa agent cache.")
+
+        st.divider()
+        st.subheader("Nạp dữ liệu")
+        data_source = st.segmented_control(
+            "Nguồn dữ liệu",
+            ("File local", "URL trực tiếp"),
+            default="File local",
+            key="data_source",
         )
         if data_source == "File local":
-            handle_local_file(use_ollama)
+            handle_local_file(use_ollama_embeddings)
         else:
-            handle_url_input(use_ollama)
-       
-        # Thêm phần chọn collection để query
-        st.header("🔍 Collection để truy vấn")
-        collection_to_query = st.text_input(
-            "Nhập tên collection cần truy vấn:",
-            "data_test",
-            help="Nhập tên collection bạn muốn sử dụng để tìm kiếm thông tin"
-        )
-       
-        #Phần 3: Cấu hình LLM
-        st.header("LLM model")
-        llm_choice = st.radio(
-            "Chọn LLM model",
-            ["gemini","Ollama"]
-        )
-        
-        return llm_choice, collection_to_query
+            handle_url_input(use_ollama_embeddings)
 
-def handle_local_file(use_ollama_embeddings: bool):
-    """
-    Xử lý khi người dùng chọn tải file
-    """
-    collection_name = st.text_input(
-        "Tên collection trong Milvus:", 
-        "data_test",
-        help="Nhập tên collection bạn muốn lưu trong Milvus"
+        st.divider()
+        if st.button("Xóa hội thoại", icon=":material/delete:"):
+            st.session_state.messages = []
+            st.rerun()
+
+    return llm_choice, collection_to_query, embedding_choice, openrouter_model
+
+
+def setup_chat_interface(llm_choice: str) -> None:
+    st.title("AI Assistant")
+    captions = {
+        "gemini": "LangChain RAG với Gemini 2.5 Flash",
+        "openrouter": "LangChain RAG với GPT-5.6 Luna qua OpenRouter",
+        "ollama": "LangChain RAG với Qwen2.5 7B chạy local qua Ollama",
+    }
+    st.caption(captions[llm_choice])
+
+    st.session_state.setdefault(
+        "messages",
+        [{"role": "assistant", "content": "Tôi có thể giúp gì cho bạn?"}],
     )
-    filename = st.text_input("Tên file JSON:", "stack.json")
-    directory = st.text_input("Thư mục chứa file:", "data")
-    
-    if st.button("Tải dữ liệu từ file"):
-        if not collection_name:
-            st.error("Vui lòng nhập tên collection!")
-            return
-            
-        with st.spinner("Đang tải dữ liệu..."):
-            try:
-                seed_milvus(
-                    'http://localhost:19530', 
-                    collection_name, 
-                    filename, 
-                    directory, 
-                    use_ollama=use_ollama_embeddings
-                )
-                st.success(f"Đã tải dữ liệu thành công vào collection '{collection_name}'!")
-            except Exception as e:
-                st.error(f"Lỗi khi tải dữ liệu: {str(e)}")
-def handle_url_input(use_ollama_embeddings: bool):
-    """
-    Xử lý khi người dùng chọn crawl URL
-    """
-    collection_name = st.text_input(
-        "Tên collection trong Milvus:", 
-        "data_test_live",
-        help="Nhập tên collection bạn muốn lưu trong Milvus"
+    for message in st.session_state.messages:
+        role = "user" if message["role"] == "human" else message["role"]
+        with st.chat_message(role):
+            st.write(message["content"])
+
+
+def handle_user_input(
+    llm_choice: str,
+    collection_name: str,
+    embedding_choice: str,
+    openrouter_model: str,
+) -> None:
+    prompt = st.chat_input(
+        "Hãy hỏi về dữ liệu đã index",
+        submit_mode="disable",
     )
-    url = st.text_input("Nhập URL:", "https://www.stack-ai.com/docs")
-    
-    if st.button("Crawl dữ liệu"):
-        if not collection_name:
-            st.error("Vui lòng nhập tên collection!")
-            return
-            
-        with st.spinner("Đang crawl dữ liệu..."):
-            try:
-                seed_milvus_live(
-                    url, 
-                    'http://localhost:19530', 
-                    collection_name, 
-                    'stack-ai', 
-                    use_ollama=use_ollama_embeddings
+    if not prompt:
+        return
+
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.write(prompt)
+
+    with st.chat_message("assistant"):
+        try:
+            with st.spinner("Đang truy xuất dữ liệu và tạo câu trả lời..."):
+                agent_executor = get_cached_agent(
+                    collection_name,
+                    embedding_choice,
+                    llm_choice,
+                    openrouter_model,
                 )
-                st.success(f"Đã crawl dữ liệu thành công vào collection '{collection_name}'!")
-            except Exception as e:
-                st.error(f"Lỗi khi crawl dữ liệu: {str(e)}")
+                output = invoke_agent(agent_executor, st.session_state.messages)
+        except Exception as error:
+            st.error(f"Không thể tạo câu trả lời: {error}")
+            return
 
-def setup_chat_interface(llm_choice):
-    st.title("💬 AI Assistant")
-    
-    # Caption động theo model
-    if llm_choice == "Gemini":
-        st.caption(" Trợ lý AI được hỗ trợ bởi LangChain và Gemini")
-    else:
-        st.caption(" Trợ lý AI được hỗ trợ bởi LangChain và Ollama LLaMA2")
-    msgs = StreamlitChatMessageHistory(key="langchain_messages")
-    
-    if "messages" not in st.session_state:
-        st.session_state.messages = [
-            {"role": "assistant", "content": "Tôi có thể giúp gì cho bạn?"}
-        ]
-        msgs.add_ai_message("Tôi có thể giúp gì cho bạn?")
+        st.write(output)
+        st.session_state.messages.append({"role": "assistant", "content": output})
 
-    for msg in st.session_state.messages:
-        role = "assistant" if msg["role"] == "assistant" else "human"
-        st.chat_message(role).write(msg["content"])
 
-    return msgs
-def handle_user_input(msgs,agent_executor):
-    """
-    Xử lý khi người dùng gửi tin nhắn:
-    1. Hiển thị tin nhắn người dùng
-    2. Gọi AI xử lý và trả lời
-    3. Lưu vào lịch sử chat
-    """
-    if prompt := st.chat_input("Hãy hỏi tôi bất cứ điều gì về Stack AI!"):
-        # Lưu và hiển thị tin nhắn người dùng
-        st.session_state.messages.append({"role": "human", "content": prompt})
-        st.chat_message("human").write(prompt)
-        msgs.add_user_message(prompt)
-
-        # Xử lý và hiển thị câu trả lời
-        with st.chat_message("assistant"):
-            st_callback = StreamlitCallbackHandler(st.container())
-            
-            # Lấy lịch sử chat
-            chat_history = [
-                {"role": msg["role"], "content": msg["content"]}
-                for msg in st.session_state.messages[:-1]
-            ]
-
-            # Gọi AI xử lý
-            response = agent_executor.invoke(
-                {
-                    "input": prompt,
-                    "chat_history": chat_history
-                },
-                {"callbacks": [st_callback]}
-            )
-
-            # Lưu và hiển thị câu trả lời
-            output = response["output"]
-            st.session_state.messages.append({"role": "assistant", "content": output})
-            msgs.add_ai_message(output)
-            st.write(output)
-
-def setup_page():
-    """
-    Hàm cấu hình web cơ bản
-    """
+def main() -> None:
     st.set_page_config(
-        page_title="RAG LangChain",  # tiêu đề 
-        page_icon="",
-        layout="wide"  # giao diện rộng
+        page_title="RAG LangChain",
+        page_icon=":material/smart_toy:",
+        layout="wide",
+    )
+    llm_choice, collection_name, embedding_choice, openrouter_model = setup_sidebar()
+    setup_chat_interface(llm_choice)
+
+    if not collection_name:
+        st.warning("Vui lòng nhập collection để bắt đầu chat.")
+        return
+
+    handle_user_input(
+        llm_choice,
+        collection_name,
+        embedding_choice,
+        openrouter_model,
     )
 
-def initialize_app(): 
-    """
-    Hàm khởi tạo cấu hình trang và đọc .env chứa api
-    """
-    load_dotenv()
-    setup_page()
-    
-def main():
-    """
-    Hàm chính điều khiển luồng chương trình
-    """
-    initialize_app()
-    llm_choice, collection_to_query = setup_sidebar()
-    msgs = setup_chat_interface(llm_choice)
-    
-    # Khởi tạo AI dựa trên lựa chọn model để trả lời
-    if llm_choice == "Gemini":
-        retriever = get_retriever(collection_to_query)
-        agent_executor = get_llm_and_agent(retriever, "gemini")
-    else:
-        retriever = get_retriever(collection_to_query)
-        agent_executor = get_llm_and_agent(retriever)
 
-    handle_user_input(msgs, agent_executor)
-
-    
 if __name__ == "__main__":
     main()

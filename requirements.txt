@@ -7,12 +7,16 @@ langchain-text-splitters==1.1.2
 # LLM & Embeddings providers
 langchain-google-genai
 langchain-huggingface
+langchain-ollama
+langchain-openai
+sentence-transformers
 
 # Vector store
 langchain-milvus==0.3.3
 
 # Agent framework
 langgraph
+langchain-classic
 
 # Retriever
 rank-bm25
