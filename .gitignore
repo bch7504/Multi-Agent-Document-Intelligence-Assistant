@@ -13,9 +13,16 @@ build/
 venv/
 .venv/
 
+# Node.js frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
 # Data files
 data/
 data_v3/
+data/uploads/
 
 # Volumes data (Milvus, MinIO, etcd)
 volumes/

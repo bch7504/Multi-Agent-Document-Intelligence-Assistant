@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Static UI mock for Document Intelligence Assistant" />
+    <title>Index — UI Mock</title>
+    <style>
+      :root {
+        color: #1d211c;
+        background: #f4f4ef;
+        font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --ink: #1d211c;
+        --muted: #777b71;
+        --line: #dedfd7;
+        --paper: #fbfbf8;
+        --green: #2f6b4f;
+        --green-soft: #e1ebe2;
+        --coral: #e8795b;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-width: 320px; min-height: 100vh; }
+      button, textarea, input { font: inherit; }
+      button { color: inherit; }
+      .app { display: grid; grid-template-columns: 280px minmax(480px, 1fr) 300px; height: 100vh; overflow: hidden; }
+      .sidebar { background: #ecece5; border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 22px 16px 16px; }
+      .brand { align-items: center; display: flex; gap: 11px; padding: 0 5px 24px; }
+      .brand-mark { align-items: center; background: var(--ink); border-radius: 7px; color: white; display: flex; font-family: Georgia, serif; font-size: 19px; font-style: italic; height: 34px; justify-content: center; width: 34px; }
+      .brand-name { font-family: Georgia, serif; font-size: 20px; line-height: 1; }
+      .brand small { color: var(--muted); display: block; font-size: 11px; margin-top: 4px; }
+      .new-chat, .upload { align-items: center; border-radius: 8px; cursor: pointer; display: flex; font-size: 13px; font-weight: 650; gap: 8px; justify-content: center; width: 100%; }
+      .new-chat { background: var(--ink); border: 0; color: white; padding: 11px 14px; }
+      .section-title { align-items: center; color: #666a61; display: flex; font-size: 10px; font-weight: 750; justify-content: space-between; letter-spacing: .11em; padding: 26px 7px 9px; text-transform: uppercase; }
+      .count { background: #dedfd7; border-radius: 10px; font-size: 10px; padding: 2px 7px; }
+      .documents { display: flex; flex: 1; flex-direction: column; gap: 4px; overflow: auto; }
+      .document { align-items: center; background: transparent; border: 1px solid transparent; border-radius: 8px; cursor: pointer; display: grid; gap: 9px; grid-template-columns: 28px minmax(0, 1fr) 17px; padding: 9px 8px; text-align: left; }
+      .document:hover { background: rgba(255,255,255,.5); }
+      .document.selected { background: #fafaf6; border-color: #dadbd3; box-shadow: 0 1px 2px rgba(30,34,29,.04); }
+      .file-icon { color: #696e65; font-size: 16px; text-align: center; }
+      .doc-copy { min-width: 0; }
+      .doc-name { display: block; font-size: 12px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .doc-meta { color: #8a8e85; display: block; font-size: 10px; margin-top: 4px; }
+      .check { border: 1px solid #c6c8bf; border-radius: 5px; display: grid; font-size: 10px; height: 16px; place-items: center; width: 16px; }
+      .selected .check { background: var(--green); border-color: var(--green); color: white; }
+      .sidebar-footer { border-top: 1px solid #d7d8d0; padding: 14px 2px 0; }
+      .upload { background: transparent; border: 1px solid #cfd1c7; padding: 9px; }
+      .sidebar-footer p { color: #94978f; font-size: 10px; margin: 8px 0 0; text-align: center; }
+      .workspace { background: var(--paper); display: flex; flex-direction: column; min-width: 0; position: relative; }
+      .topbar { align-items: center; border-bottom: 1px solid #ebebe5; display: flex; height: 58px; justify-content: space-between; padding: 0 22px; }
+      .context { font-size: 12px; font-weight: 650; }
+      .topbar-actions { align-items: center; display: flex; gap: 8px; }
+      .model-launch-button { align-items: center; border-radius: 20px; cursor: pointer; display: flex; font-size: 10px; font-weight: 750; gap: 7px; padding: 7px 11px; }
+      .cloud-model-button { background: white; border: 1px solid var(--line); color: var(--ink); }
+      .local-model-button { background: var(--ink); border: 1px solid var(--ink); color: white; }
+      .model-launch-button .model-dot { border-radius: 50%; height: 7px; width: 7px; }
+      .cloud-model-button .model-dot { background: #6589c8; }
+      .local-model-button .model-dot { background: #7fc49a; }
+      .mock-pill, .status-pill { align-items: center; background: #f1f1eb; border: 1px solid #dfdfd7; border-radius: 20px; color: #666a61; display: flex; font-size: 10px; font-weight: 700; gap: 6px; padding: 6px 9px; }
+      .mock-pill span, .status-pill span, .eyebrow span { background: var(--coral); border-radius: 50%; height: 6px; width: 6px; }
+      .conversation { flex: 1; min-height: 0; overflow-y: auto; padding: 54px max(28px, calc((100% - 720px) / 2)) 190px; }
+      .hero { margin-bottom: 52px; }
+      .eyebrow { align-items: center; color: #747970; display: flex; font-size: 9px; font-weight: 800; gap: 7px; letter-spacing: .14em; }
+      .hero h1 { font-family: Georgia, serif; font-size: clamp(34px, 4vw, 50px); font-weight: 400; letter-spacing: -.035em; margin: 13px 0 8px; }
+      .hero p { color: var(--muted); font-family: Georgia, serif; font-size: 16px; margin: 0; }
+      .messages { display: flex; flex-direction: column; gap: 30px; }
+      .message { display: grid; gap: 13px; grid-template-columns: 32px minmax(0, 1fr); }
+      .message.user { margin-left: 55px; }
+      .avatar { align-items: center; background: #ecece6; border: 1px solid #dedfd6; border-radius: 8px; display: flex; font-size: 9px; font-weight: 750; height: 32px; justify-content: center; width: 32px; }
+      .assistant .avatar { background: var(--ink); border-color: var(--ink); color: white; }
+      .message-label { font-size: 11px; font-weight: 750; margin: 1px 0 8px; }
+      .message-content { color: #383d36; font-family: Georgia, serif; font-size: 15px; line-height: 1.75; white-space: pre-wrap; }
+      .user .message-content { background: #efefe9; border-radius: 4px 12px 12px 12px; display: inline-block; font-family: inherit; font-size: 13px; line-height: 1.55; padding: 11px 14px; }
+      .citation { align-items: center; background: #f5f5f0; border: 1px solid #dfdfd7; border-radius: 7px; display: inline-flex; gap: 9px; margin-top: 14px; padding: 8px 10px; }
+      .citation-number { align-items: center; background: var(--green-soft); border-radius: 5px; color: var(--green); display: flex; font-size: 10px; font-weight: 800; height: 22px; justify-content: center; width: 22px; }
+      .citation strong { display: block; font-size: 10px; }
+      .citation small { color: #858981; display: block; font-size: 9px; margin-top: 3px; }
+      .composer-wrap { bottom: 0; left: 0; padding: 24px max(28px, calc((100% - 720px) / 2)) 22px; position: absolute; right: 0; }
+      .composer-wrap::before { background: linear-gradient(transparent, var(--paper) 45%); content: ""; inset: -65px 0 0; pointer-events: none; position: absolute; }
+      .composer { background: white; border: 1px solid #d9dbd2; border-radius: 12px; box-shadow: 0 13px 35px rgba(37,42,34,.09); padding: 8px; position: relative; }
+      .task-tabs { display: flex; gap: 2px; padding-bottom: 4px; }
+      .task { background: transparent; border: 0; border-radius: 6px; color: #7a7e75; cursor: pointer; font-size: 10px; font-weight: 650; padding: 6px 8px; }
+      .task.active { background: var(--green-soft); color: var(--green); }
+      .input-row { align-items: flex-end; display: flex; gap: 8px; }
+      textarea { border: 0; flex: 1; line-height: 1.5; min-height: 45px; outline: none; padding: 10px 8px; resize: none; }
+      .send { align-items: center; background: var(--green); border: 0; border-radius: 8px; color: white; cursor: pointer; display: flex; font-size: 18px; height: 38px; justify-content: center; margin-bottom: 3px; width: 38px; }
+      .composer-footer { border-top: 1px solid #f0f0eb; color: #979a92; display: flex; font-size: 9px; justify-content: space-between; margin-top: 3px; padding: 8px 5px 1px; }
+      .trace { background: #f0f0ea; border-left: 1px solid var(--line); display: flex; flex-direction: column; padding: 22px 18px; }
+      .trace-head { align-items: center; display: flex; justify-content: space-between; }
+      .trace-head small { color: #858981; font-size: 8px; font-weight: 800; letter-spacing: .13em; }
+      .trace h2 { font-family: Georgia, serif; font-size: 20px; font-weight: 400; margin: 5px 0 0; }
+      .status-pill span { background: #4c8a61; }
+      .timeline { margin-top: 38px; }
+      .step { display: grid; grid-template-columns: 25px 1fr; min-height: 72px; }
+      .rail { border-left: 1px solid #cfd2c8; margin-left: 10px; position: relative; }
+      .step:last-child .rail { border-color: transparent; }
+      .rail span { align-items: center; background: var(--green); border-radius: 50%; color: white; display: flex; font-size: 10px; height: 20px; justify-content: center; left: -10px; position: absolute; top: -2px; width: 20px; }
+      .step-copy { padding-left: 8px; }
+      .step-copy div { display: flex; justify-content: space-between; }
+      .step-copy strong { font-size: 11px; }
+      .step-copy time, .step-copy p { color: #858981; font-size: 9px; }
+      .step-copy p { margin: 6px 0; }
+      .trace-summary { border-top: 1px solid #d9dbd2; margin-top: auto; padding-top: 13px; }
+      .trace-summary div { display: flex; font-size: 10px; justify-content: space-between; padding: 5px 0; }
+      .pass { color: var(--green); }
+      .model-overlay { align-items: center; background: rgba(24, 28, 23, .5); display: none; inset: 0; justify-content: center; padding: 24px; position: fixed; z-index: 20; }
+      .model-overlay.open { display: flex; }
+      .model-panel { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 28px 80px rgba(18, 23, 18, .24); max-height: calc(100vh - 48px); max-width: 760px; overflow-y: auto; padding: 24px; width: 100%; }
+      .model-panel-head { align-items: flex-start; display: flex; gap: 20px; justify-content: space-between; }
+      .model-kicker { color: var(--green); font-size: 9px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+      .model-panel h2 { font-family: Georgia, serif; font-size: 28px; font-weight: 400; margin: 6px 0; }
+      .model-panel-head p { color: var(--muted); font-size: 12px; line-height: 1.55; margin: 0; max-width: 560px; }
+      .close-models { background: transparent; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; height: 34px; min-width: 34px; }
+      .runtime-tabs { background: #efefe9; border-radius: 10px; display: grid; gap: 4px; grid-template-columns: 1fr 1fr; margin-top: 18px; padding: 4px; }
+      .runtime-tab { background: transparent; border: 0; border-radius: 7px; color: var(--muted); cursor: pointer; font-size: 10px; font-weight: 750; padding: 9px 12px; }
+      .runtime-tab.active { background: white; box-shadow: 0 1px 4px rgba(30,34,29,.08); color: var(--ink); }
+      .runtime-view[hidden] { display: none; }
+      .model-section { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 18px; }
+      .model-section-title { align-items: baseline; display: flex; gap: 10px; justify-content: space-between; margin-bottom: 10px; }
+      .model-section-title strong { font-size: 12px; }
+      .model-section-title span { color: var(--muted); font-size: 10px; }
+      .model-grid { display: grid; gap: 9px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .model-card { background: white; border: 1px solid var(--line); border-radius: 11px; display: flex; flex-direction: column; min-height: 145px; padding: 13px; }
+      .model-card.selected { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
+      .model-card-head { align-items: center; display: flex; justify-content: space-between; }
+      .model-card h3 { font-size: 12px; margin: 0; }
+      .provider-badge { border: 1px solid var(--line); border-radius: 10px; color: var(--muted); font-size: 8px; font-weight: 800; padding: 3px 6px; text-transform: uppercase; }
+      .recommended { background: var(--green-soft); border-radius: 10px; color: var(--green); font-size: 8px; font-weight: 800; padding: 3px 6px; text-transform: uppercase; }
+      .model-card p { color: var(--muted); flex: 1; font-size: 10px; line-height: 1.5; margin: 8px 0 12px; }
+      .model-actions { display: flex; gap: 6px; }
+      .choose-model, .download-model { border-radius: 7px; cursor: pointer; font-size: 9px; font-weight: 750; padding: 7px 8px; }
+      .choose-model { background: var(--green-soft); border: 1px solid transparent; color: var(--green); flex: 1; }
+      .download-model { background: transparent; border: 1px solid var(--line); }
+      .download-model:disabled { cursor: default; opacity: .6; }
+      .model-status { color: var(--muted); font-size: 10px; margin-top: 8px; min-height: 14px; }
+      .model-footer { align-items: center; border-top: 1px solid var(--line); display: flex; gap: 12px; justify-content: space-between; margin-top: 22px; padding-top: 17px; }
+      .selection-summary { color: var(--muted); font-size: 10px; line-height: 1.5; }
+      .apply-models { background: var(--ink); border: 0; border-radius: 8px; color: white; cursor: pointer; font-size: 10px; font-weight: 750; padding: 10px 14px; }
+      .apply-models:disabled { cursor: not-allowed; opacity: .4; }
+      .mock-warning { background: #f6eee8; border: 1px solid #ead8cb; border-radius: 9px; color: #795947; font-size: 10px; line-height: 1.5; margin-top: 16px; padding: 10px 12px; }
+      .custom-model-box { background: #f5f5f0; border: 1px dashed #cfd2c8; border-radius: 11px; margin-top: 22px; padding: 15px; }
+      .custom-model-box.active { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
+      .custom-model-head { align-items: baseline; display: flex; gap: 12px; justify-content: space-between; margin-bottom: 11px; }
+      .custom-model-head strong { font-size: 12px; }
+      .custom-model-head span { color: var(--muted); font-size: 9px; }
+      .custom-model-grid { display: grid; gap: 8px; grid-template-columns: 120px 145px minmax(180px, 1fr) auto; }
+      .custom-model-grid select, .custom-model-grid input { background: white; border: 1px solid var(--line); border-radius: 7px; color: var(--ink); font-size: 10px; min-width: 0; outline: none; padding: 9px 10px; }
+      .custom-model-grid input:focus, .custom-model-grid select:focus { border-color: var(--green); }
+      .use-custom-model, .download-custom-model { border-radius: 7px; cursor: pointer; font-size: 9px; font-weight: 750; padding: 8px 11px; }
+      .use-custom-model { background: var(--green); border: 1px solid var(--green); color: white; }
+      .download-custom-model { background: white; border: 1px solid var(--line); margin-top: 8px; }
+      .custom-model-status { color: var(--muted); font-size: 9px; line-height: 1.45; margin-top: 9px; }
+      @media (max-width: 1050px) { .app { grid-template-columns: 250px 1fr; } .trace { display: none; } }
+      @media (max-width: 700px) { .app { display: block; } .sidebar { display: none; } .workspace { height: 100vh; } .conversation { padding: 38px 20px 185px; } .composer-wrap { padding: 15px; } .hero h1 { font-size: 36px; } .model-grid, .custom-model-grid { grid-template-columns: 1fr; } .mock-pill { display: none; } }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand"><div class="brand-mark">I</div><div><div class="brand-name">Index</div><small>Document intelligence</small></div></div>
+        <button class="new-chat" id="new-chat">＋ New conversation</button>
+        <div class="section-title"><span>Knowledge base</span><span class="count" id="doc-count">3</span></div>
+        <div class="documents" id="documents">
+          <button class="document selected"><span class="file-icon">▤</span><span class="doc-copy"><span class="doc-name">Attention is All You Need.pdf</span><span class="doc-meta">15 pages · 84 chunks</span></span><span class="check">✓</span></button>
+          <button class="document selected"><span class="file-icon">▤</span><span class="doc-copy"><span class="doc-name">Retrieval-Augmented Generation.pdf</span><span class="doc-meta">12 pages · 61 chunks</span></span><span class="check">✓</span></button>
+          <button class="document"><span class="file-icon">▤</span><span class="doc-copy"><span class="doc-name">Building Effective Agents.pdf</span><span class="doc-meta">9 pages · 47 chunks</span></span><span class="check"></span></button>
+        </div>
+        <div class="sidebar-footer">
+          <input id="file-input" type="file" accept="application/pdf,.pdf" hidden />
+          <button class="upload" id="upload">⇧ Upload PDF</button>
+          <p>UI mock only · file không được gửi đi</p>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar"><span class="context">Research workspace⌄</span><div class="topbar-actions"><button class="model-launch-button cloud-model-button" id="cloud-model-button" type="button"><span class="model-dot"></span><span id="cloud-model-label">Cloud</span>⌄</button><button class="model-launch-button local-model-button" id="local-model-button" type="button"><span class="model-dot"></span><span id="local-model-label">Local</span>⌄</button><span class="mock-pill"><span></span> STATIC UI MOCK</span></div></header>
+        <section class="conversation" id="conversation">
+          <div class="hero"><div class="eyebrow"><span></span><b id="source-count">GROUNDED IN 2 SOURCES</b></div><h1>Understand your documents.</h1><p>Ask, synthesize, and test your knowledge with verifiable sources.</p></div>
+          <div class="messages" id="messages">
+            <article class="message assistant"><div class="avatar">AI</div><div><div class="message-label">Index</div><div class="message-content">Chọn tài liệu ở bên trái, sau đó đặt câu hỏi hoặc yêu cầu tóm tắt và tạo quiz. Đây là dữ liệu minh họa, không kết nối backend.</div></div></article>
+          </div>
+        </section>
+        <div class="composer-wrap">
+          <form class="composer" id="composer">
+            <div class="task-tabs"><button type="button" class="task active" data-task="Auto">✦ Auto</button><button type="button" class="task" data-task="Ask">⌕ Ask</button><button type="button" class="task" data-task="Summary">▤ Summary</button><button type="button" class="task" data-task="Quiz">☷ Quiz</button></div>
+            <div class="input-row"><textarea id="prompt" rows="1" placeholder="Ask a question across your documents…"></textarea><button class="send" type="submit">↑</button></div>
+            <div class="composer-footer"><span id="selected-label">2 sources selected</span><span>Enter to send · UI mock response</span></div>
+          </form>
+        </div>
+      </main>
+
+      <aside class="trace">
+        <div class="trace-head"><div><small>MOCK RUN</small><h2>Agent trace</h2></div><span class="status-pill"><span></span> Complete</span></div>
+        <div class="timeline" id="timeline">
+          <div class="step"><div class="rail"><span>✓</span></div><div class="step-copy"><div><strong>Task resolver</strong><time>84 ms</time></div><p>Route: QA</p></div></div>
+          <div class="step"><div class="rail"><span>✓</span></div><div class="step-copy"><div><strong>Hybrid retrieval</strong><time>312 ms</time></div><p>2 documents · 4 chunks</p></div></div>
+          <div class="step"><div class="rail"><span>✓</span></div><div class="step-copy"><div><strong>QA workflow</strong><time>527 ms</time></div><p>Grounded response generated</p></div></div>
+          <div class="step"><div class="rail"><span>✓</span></div><div class="step-copy"><div><strong>Citation review</strong><time>127 ms</time></div><p>PASS · no retry</p></div></div>
+        </div>
+        <div class="trace-summary"><div><span>Total latency</span><strong>1,050 ms</strong></div><div><span>Review</span><strong class="pass">PASS</strong></div></div>
+      </aside>
+    </div>
+
+    <div class="model-overlay" id="model-overlay" role="dialog" aria-modal="true" aria-labelledby="model-dialog-title">
+      <section class="model-panel">
+        <div class="model-panel-head"><div><div class="model-kicker">Model configuration · UI mock</div><h2 id="model-dialog-title">Chọn model cho dự án</h2><p>Chọn độc lập chat model và embedding model từ cloud hoặc Ollama local. Không có provider mặc định và thay đổi embedding model cần index lại collection.</p></div><button class="close-models" id="close-models" type="button" aria-label="Đóng">×</button></div>
+        <div class="runtime-tabs" role="tablist" aria-label="Nguồn model"><button class="runtime-tab active" type="button" role="tab" aria-selected="true" data-runtime-tab="cloud">Cloud APIs</button><button class="runtime-tab" type="button" role="tab" aria-selected="false" data-runtime-tab="local">Local Ollama</button></div>
+        <div class="mock-warning">UI mock không kết nối backend. API key cloud chỉ đặt trong <code>.env</code>, không nhập vào trình duyệt; nút tải model local chỉ mô phỏng tiến trình.</div>
+
+        <div class="runtime-view" data-runtime-view="cloud">
+          <div class="model-section">
+            <div class="model-section-title"><strong>1. Cloud chat model</strong><span>LLM_PROVIDER và biến model tương ứng</span></div>
+            <div class="model-grid">
+              <article class="model-card" data-card-kind="chat"><div class="model-card-head"><h3>GPT-5.6 Luna</h3><span class="provider-badge">OpenRouter</span></div><p>Chat qua OpenRouter với structured output và tool calling.</p><div class="model-actions"><button class="choose-model" type="button" data-kind="chat" data-provider="openrouter" data-runtime="cloud" data-model="openai/gpt-5.6-luna">Chọn</button></div><div class="model-status"><code>OPENROUTER_MODEL</code></div></article>
+              <article class="model-card" data-card-kind="chat"><div class="model-card-head"><h3>GPT-5.6 Luna</h3><span class="provider-badge">OpenAI</span></div><p>Kết nối trực tiếp OpenAI cho chat và structured generation.</p><div class="model-actions"><button class="choose-model" type="button" data-kind="chat" data-provider="openai" data-runtime="cloud" data-model="gpt-5.6-luna">Chọn</button></div><div class="model-status"><code>OPENAI_MODEL</code></div></article>
+              <article class="model-card" data-card-kind="chat"><div class="model-card-head"><h3>Gemini 2.5 Flash</h3><span class="provider-badge">Gemini</span></div><p>Phản hồi nhanh, phù hợp QA và workflow cần độ trễ thấp.</p><div class="model-actions"><button class="choose-model" type="button" data-kind="chat" data-provider="gemini" data-runtime="cloud" data-model="gemini-2.5-flash">Chọn</button></div><div class="model-status"><code>GEMINI_MODEL</code></div></article>
+            </div>
+          </div>
+
+          <div class="model-section">
+            <div class="model-section-title"><strong>2. Cloud embedding model</strong><span>EMBEDDING_PROVIDER và model có thể chọn riêng</span></div>
+            <div class="model-grid">
+              <article class="model-card" data-card-kind="embedding"><div class="model-card-head"><h3>Text Embedding 3 Small</h3><span class="provider-badge">OpenRouter</span></div><p>Chi phí thấp, dùng endpoint embedding OpenRouter tương thích OpenAI.</p><div class="model-actions"><button class="choose-model" type="button" data-kind="embedding" data-provider="openrouter" data-runtime="cloud" data-model="openai/text-embedding-3-small">Chọn</button></div><div class="model-status"><code>OPENROUTER_EMBEDDING_MODEL</code></div></article>
+              <article class="model-card" data-card-kind="embedding"><div class="model-card-head"><h3>Text Embedding 3 Small</h3><span class="provider-badge">OpenAI</span></div><p>Lựa chọn tiết kiệm cho indexing và semantic retrieval trực tiếp.</p><div class="model-actions"><button class="choose-model" type="button" data-kind="embedding" data-provider="openai" data-runtime="cloud" data-model="text-embedding-3-small">Chọn</button></div><div class="model-status"><code>OPENAI_EMBEDDING_MODEL</code></div></article>
+              <article class="model-card" data-card-kind="embedding"><div class="model-card-head"><h3>Text Embedding 3 Large</h3><span class="provider-badge">OpenAI</span></div><p>Chất lượng đa ngôn ngữ cao hơn, đổi model cần index lại dữ liệu.</p><div class="model-actions"><button class="choose-model" type="button" data-kind="embedding" data-provider="openai" data-runtime="cloud" data-model="text-embedding-3-large">Chọn</button></div><div class="model-status"><code>OPENAI_EMBEDDING_MODEL</code></div></article>
+              <article class="model-card" data-card-kind="embedding"><div class="model-card-head"><h3>Gemini Embedding 001</h3><span class="provider-badge">Gemini</span></div><p>Text embedding đa ngôn ngữ dùng chung Google API key với chat.</p><div class="model-actions"><button class="choose-model" type="button" data-kind="embedding" data-provider="gemini" data-runtime="cloud" data-model="models/gemini-embedding-001">Chọn</button></div><div class="model-status"><code>GEMINI_EMBEDDING_MODEL</code></div></article>
+            </div>
+          </div>
+        </div>
+
+        <div class="runtime-view" data-runtime-view="local" hidden>
+          <div class="model-section">
+            <div class="model-section-title"><strong>1. Local chat model</strong><span>Ollama · chỉ chạy khi người dùng chủ động chọn</span></div>
+            <div class="model-grid">
+              <article class="model-card" data-card-kind="chat"><div class="model-card-head"><h3>Qwen3 4B</h3><span class="provider-badge">Ollama</span></div><p>Nhẹ hơn, phù hợp máy ít RAM; reasoning thấp hơn bản 8B.</p><div class="model-actions"><button class="choose-model" type="button" data-kind="chat" data-provider="ollama" data-runtime="local" data-model="qwen3:4b">Chọn</button><button class="download-model" type="button" data-model="qwen3:4b">Tải</button></div><div class="model-status">Khoảng 2.5 GB</div></article>
+              <article class="model-card" data-card-kind="chat"><div class="model-card-head"><h3>Qwen3 8B</h3><span class="recommended">Khuyên dùng</span></div><p>Cân bằng chất lượng và tài nguyên cho RAG Việt–Anh.</p><div class="model-actions"><button class="choose-model" type="button" data-kind="chat" data-provider="ollama" data-runtime="local" data-model="qwen3:8b">Chọn</button><button class="download-model" type="button" data-model="qwen3:8b">Tải</button></div><div class="model-status">Khoảng 5.2 GB</div></article>
+              <article class="model-card" data-card-kind="chat"><div class="model-card-head"><h3>Qwen3 14B</h3><span class="provider-badge">Ollama</span></div><p>Chất lượng cao hơn nhưng cần nhiều RAM/VRAM.</p><div class="model-actions"><button class="choose-model" type="button" data-kind="chat" data-provider="ollama" data-runtime="local" data-model="qwen3:14b">Chọn</button><button class="download-model" type="button" data-model="qwen3:14b">Tải</button></div><div class="model-status">Khoảng 9.3 GB</div></article>
+            </div>
+          </div>
+
+          <div class="model-section">
+            <div class="model-section-title"><strong>2. Local embedding model</strong><span>Đổi model cần index lại collection</span></div>
+            <div class="model-grid">
+              <article class="model-card" data-card-kind="embedding"><div class="model-card-head"><h3>Qwen3 Embedding 0.6B</h3><span class="recommended">Khuyên dùng</span></div><p>Đa ngôn ngữ và đủ nhẹ cho retrieval chạy local.</p><div class="model-actions"><button class="choose-model" type="button" data-kind="embedding" data-provider="ollama" data-runtime="local" data-model="qwen3-embedding:0.6b">Chọn</button><button class="download-model" type="button" data-model="qwen3-embedding:0.6b">Tải</button></div><div class="model-status">Khoảng 639 MB</div></article>
+            </div>
+          </div>
+        </div>
+
+        <div class="custom-model-box" id="custom-model-box">
+          <div class="custom-model-head"><strong>Không thấy model bạn muốn?</strong><span>Nhập đúng model ID mà provider hỗ trợ</span></div>
+          <div class="custom-model-grid">
+            <select id="custom-model-kind" aria-label="Loại model">
+              <option value="chat">Chat model</option>
+              <option value="embedding">Embedding model</option>
+            </select>
+            <select id="custom-model-provider" aria-label="Provider">
+              <option value="openrouter">OpenRouter</option>
+              <option value="openai">OpenAI</option>
+              <option value="gemini">Gemini</option>
+              <option value="ollama">Ollama local</option>
+            </select>
+            <input id="custom-model-id" type="text" autocomplete="off" placeholder="Ví dụ: provider/model-name" aria-label="Model ID mong muốn" />
+            <button class="use-custom-model" id="use-custom-model" type="button">Dùng model này</button>
+          </div>
+          <button class="download-custom-model" id="download-custom-model" type="button" hidden>Mô phỏng tải model local</button>
+          <div class="custom-model-status" id="custom-model-status">Cloud model cần API key tương ứng trong <code>.env</code>. UI mock không kiểm tra model có tồn tại hay không.</div>
+        </div>
+
+        <div class="model-footer"><div class="selection-summary" id="selection-summary">Chat: chưa chọn<br />Embedding: chưa chọn</div><button class="apply-models" id="apply-models" type="button" disabled>Áp dụng lựa chọn</button></div>
+      </section>
+    </div>
+
+    <script>
+      // Interaction minh họa cục bộ. File này không thực hiện bất kỳ network request nào.
+      const documents = document.querySelector("#documents");
+      const sourceCount = document.querySelector("#source-count");
+      const selectedLabel = document.querySelector("#selected-label");
+      const messages = document.querySelector("#messages");
+      const conversation = document.querySelector("#conversation");
+      const prompt = document.querySelector("#prompt");
+      const modelOverlay = document.querySelector("#model-overlay");
+      const applyModels = document.querySelector("#apply-models");
+      const selectionSummary = document.querySelector("#selection-summary");
+      const customModelBox = document.querySelector("#custom-model-box");
+      const customModelKind = document.querySelector("#custom-model-kind");
+      const customModelProvider = document.querySelector("#custom-model-provider");
+      const customModelId = document.querySelector("#custom-model-id");
+      const customModelStatus = document.querySelector("#custom-model-status");
+      const downloadCustomModel = document.querySelector("#download-custom-model");
+      const selectedModels = { chat: null, embedding: null };
+      let activeTask = "Auto";
+
+      function refreshModelSelection() {
+        const chat = selectedModels.chat
+          ? `${selectedModels.chat.provider} · ${selectedModels.chat.model}`
+          : "chưa chọn";
+        const embedding = selectedModels.embedding
+          ? `${selectedModels.embedding.provider} · ${selectedModels.embedding.model}`
+          : "chưa chọn";
+        selectionSummary.innerHTML = `Chat: ${chat}<br />Embedding: ${embedding}`;
+        applyModels.disabled = !(selectedModels.chat && selectedModels.embedding);
+      }
+
+      function setRuntimeView(runtime) {
+        document.querySelectorAll("[data-runtime-tab]").forEach((tab) => {
+          const active = tab.dataset.runtimeTab === runtime;
+          tab.classList.toggle("active", active);
+          tab.setAttribute("aria-selected", String(active));
+        });
+        document.querySelectorAll("[data-runtime-view]").forEach((view) => {
+          view.hidden = view.dataset.runtimeView !== runtime;
+        });
+      }
+
+      function openModelPicker(runtime) {
+        setRuntimeView(runtime);
+        modelOverlay.classList.add("open");
+      }
+
+      document.querySelector("#cloud-model-button").addEventListener("click", () => openModelPicker("cloud"));
+      document.querySelector("#local-model-button").addEventListener("click", () => openModelPicker("local"));
+      document.querySelectorAll("[data-runtime-tab]").forEach((tab) => {
+        tab.addEventListener("click", () => setRuntimeView(tab.dataset.runtimeTab));
+      });
+      document.querySelector("#close-models").addEventListener("click", () => modelOverlay.classList.remove("open"));
+      modelOverlay.addEventListener("click", (event) => { if (event.target === modelOverlay) modelOverlay.classList.remove("open"); });
+      document.addEventListener("keydown", (event) => { if (event.key === "Escape") modelOverlay.classList.remove("open"); });
+
+      document.querySelectorAll(".choose-model").forEach((button) => {
+        button.addEventListener("click", () => {
+          const { kind, model, provider, runtime } = button.dataset;
+          selectedModels[kind] = { model, provider, runtime, custom: false };
+          document.querySelectorAll(`[data-card-kind="${kind}"]`).forEach((card) => card.classList.remove("selected"));
+          button.closest(".model-card").classList.add("selected");
+          customModelBox.classList.toggle("active", Object.values(selectedModels).some((item) => item?.custom));
+          refreshModelSelection();
+        });
+      });
+
+      customModelProvider.addEventListener("change", () => {
+        const isLocal = customModelProvider.value === "ollama";
+        downloadCustomModel.hidden = !isLocal;
+        customModelStatus.innerHTML = isLocal
+          ? "Nhập tên model Ollama rồi chọn hoặc mô phỏng tải. Không có lệnh tải thật được thực thi."
+          : "Cloud model cần API key tương ứng trong <code>.env</code>. UI mock không kiểm tra model có tồn tại hay không.";
+      });
+
+      document.querySelector("#use-custom-model").addEventListener("click", () => {
+        const kind = customModelKind.value;
+        const provider = customModelProvider.value;
+        const model = customModelId.value.trim();
+        if (!model) {
+          customModelStatus.textContent = "Hãy nhập model ID trước khi chọn.";
+          customModelId.focus();
+          return;
+        }
+        const runtime = provider === "ollama" ? "local" : "cloud";
+        selectedModels[kind] = { model, provider, runtime, custom: true };
+        document.querySelectorAll(`[data-card-kind="${kind}"]`).forEach((card) => card.classList.remove("selected"));
+        customModelBox.classList.add("active");
+        customModelStatus.textContent = `${kind === "chat" ? "Chat" : "Embedding"}: đã chọn ${provider} · ${model} trong mock.`;
+        refreshModelSelection();
+      });
+
+      downloadCustomModel.addEventListener("click", () => {
+        const model = customModelId.value.trim();
+        if (!model) {
+          customModelStatus.textContent = "Hãy nhập tên model Ollama trước khi mô phỏng tải.";
+          customModelId.focus();
+          return;
+        }
+        downloadCustomModel.disabled = true;
+        let progress = 0;
+        customModelStatus.textContent = `Mô phỏng tải ${model} · 0%`;
+        const timer = setInterval(() => {
+          progress += 20;
+          customModelStatus.textContent = progress < 100
+            ? `Mô phỏng tải ${model} · ${progress}%`
+            : `${model} đã sẵn sàng trong bản mock.`;
+          if (progress >= 100) {
+            clearInterval(timer);
+            downloadCustomModel.disabled = false;
+          }
+        }, 220);
+      });
+
+      document.querySelectorAll(".download-model").forEach((button) => {
+        button.addEventListener("click", () => {
+          const status = button.closest(".model-card").querySelector(".model-status");
+          button.disabled = true;
+          let progress = 0;
+          status.textContent = "Mô phỏng tải · 0%";
+          const timer = setInterval(() => {
+            progress += 20;
+            status.textContent = progress < 100 ? `Mô phỏng tải · ${progress}%` : "Sẵn sàng trong bản mock";
+            if (progress >= 100) {
+              clearInterval(timer);
+              button.textContent = "Đã tải";
+            }
+          }, 220);
+        });
+      });
+
+      applyModels.addEventListener("click", () => {
+        const values = Object.values(selectedModels).filter(Boolean);
+        document.querySelector("#cloud-model-label").textContent = values.some((item) => item.runtime === "cloud") ? "Cloud ✓" : "Cloud";
+        document.querySelector("#local-model-label").textContent = values.some((item) => item.runtime === "local") ? "Local ✓" : "Local";
+        applyModels.textContent = "Đã áp dụng trong mock";
+        setTimeout(() => {
+          applyModels.textContent = "Áp dụng lựa chọn";
+          modelOverlay.classList.remove("open");
+        }, 600);
+      });
+
+      function refreshSelection() {
+        const selected = documents.querySelectorAll(".document.selected").length;
+        sourceCount.textContent = `GROUNDED IN ${selected} SOURCE${selected === 1 ? "" : "S"}`;
+        selectedLabel.textContent = `${selected} source${selected === 1 ? "" : "s"} selected`;
+      }
+
+      documents.addEventListener("click", (event) => {
+        const row = event.target.closest(".document");
+        if (!row) return;
+        row.classList.toggle("selected");
+        row.querySelector(".check").textContent = row.classList.contains("selected") ? "✓" : "";
+        refreshSelection();
+      });
+
+      document.querySelectorAll(".task").forEach((button) => {
+        button.addEventListener("click", () => {
+          document.querySelectorAll(".task").forEach((item) => item.classList.remove("active"));
+          button.classList.add("active");
+          activeTask = button.dataset.task;
+        });
+      });
+
+      document.querySelector("#upload").addEventListener("click", () => document.querySelector("#file-input").click());
+      document.querySelector("#file-input").addEventListener("change", (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        const row = document.createElement("button");
+        row.className = "document selected";
+        row.innerHTML = `<span class="file-icon">▤</span><span class="doc-copy"><span class="doc-name"></span><span class="doc-meta">Local preview · not uploaded</span></span><span class="check">✓</span>`;
+        row.querySelector(".doc-name").textContent = file.name;
+        documents.prepend(row);
+        document.querySelector("#doc-count").textContent = documents.children.length;
+        refreshSelection();
+        event.target.value = "";
+      });
+
+      document.querySelector("#new-chat").addEventListener("click", () => {
+        messages.innerHTML = `<article class="message assistant"><div class="avatar">AI</div><div><div class="message-label">Index</div><div class="message-content">Cuộc hội thoại mock mới đã sẵn sàng.</div></div></article>`;
+      });
+
+      document.querySelector("#composer").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const text = prompt.value.trim();
+        if (!text) return;
+        const reply = activeTask === "Quiz"
+          ? "Câu 1 — Thành phần nào cung cấp context cho mô hình sinh?\n\nA. Retriever  B. Optimizer  C. Tokenizer  D. Scheduler\n\nĐáp án minh họa: A."
+          : activeTask === "Summary"
+            ? "Bản tóm tắt minh họa: tài liệu mô tả attention, retrieval và workflow agent có kiểm soát."
+            : "Câu trả lời minh họa: RAG truy xuất các đoạn liên quan trước khi mô hình tạo câu trả lời có căn cứ.";
+        messages.insertAdjacentHTML("beforeend", `<article class="message user"><div class="avatar">You</div><div><div class="message-label">You</div><div class="message-content"></div></div></article>`);
+        messages.lastElementChild.querySelector(".message-content").textContent = text;
+        messages.insertAdjacentHTML("beforeend", `<article class="message assistant"><div class="avatar">AI</div><div><div class="message-label">Index · MOCK</div><div class="message-content"></div><div class="citation"><span class="citation-number">1</span><span><strong>Retrieval-Augmented Generation.pdf</strong><small>Page 5 · Mock citation</small></span></div></div></article>`);
+        messages.lastElementChild.querySelector(".message-content").textContent = reply;
+        prompt.value = "";
+        conversation.scrollTop = conversation.scrollHeight;
+      });
+    </script>
+  </body>
+</html>
