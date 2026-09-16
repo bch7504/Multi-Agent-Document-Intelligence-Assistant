@@ -1,0 +1,257 @@
+[
+  {
+    "id": "document-indexed-retrieval",
+    "question": "How are uploaded documents prepared for semantic retrieval?",
+    "expected_phrases": ["indexed copy", "semantic search"]
+  },
+  {
+    "id": "document-ocr",
+    "question": "Which feature extracts text from images inside uploaded documents?",
+    "expected_phrases": ["Text in Images (OCR)", "Extract and include text"]
+  },
+  {
+    "id": "document-chunking-settings",
+    "question": "Which settings control how documents are divided into retrieval chunks?",
+    "expected_phrases": ["Chunking Algorithm", "Chunk Overlap", "Chunk Length"]
+  },
+  {
+    "id": "answer-citations",
+    "question": "What evidence can citations attach to a grounded answer?",
+    "expected_phrases": ["references", "external sources or uploaded documents"]
+  },
+  {
+    "id": "retrieval-metadata-filters",
+    "question": "How can retrieval be restricted to documents matching selected metadata?",
+    "expected_phrases": ["Metadata filtering", "metadata constraints"]
+  },
+  {
+    "id": "retrieval-live-connectors",
+    "question": "Why is direct connected-app search useful for frequently changing documents?",
+    "expected_phrases": ["skips the index entirely", "always up to date"]
+  },
+  {
+    "id": "llm-provider-switching",
+    "question": "Can an assistant switch between different LLM providers?",
+    "expected_phrases": ["provider-agnostic"]
+  },
+  {
+    "id": "local-model-hosting",
+    "question": "Can the assistant use language models running on private infrastructure?",
+    "expected_phrases": ["models hosted on your own infrastructure"]
+  },
+  {
+    "id": "agent-tool-calling",
+    "question": "How can an LLM autonomously select actions during a workflow?",
+    "expected_phrases": ["tools", "function calling"]
+  },
+  {
+    "id": "external-api-tool",
+    "question": "How can an agent call an external HTTP API?",
+    "expected_phrases": ["Send HTTP Request", "custom API call"]
+  },
+  {
+    "id": "memory-user-isolation",
+    "question": "Is conversational memory isolated between different users?",
+    "expected_phrases": ["user-dependent", "isolated instance of LLM memory"]
+  },
+  {
+    "id": "memory-context-modes",
+    "question": "Which sliding-window memory modes can retain recent conversation context?",
+    "expected_phrases": ["Sliding Window", "Sliding Window with Input"]
+  },
+  {
+    "id": "access-rbac",
+    "question": "How can role-based access control limit project and organization actions?",
+    "expected_phrases": ["Role-based access control", "Organization settings"]
+  },
+  {
+    "id": "access-private-folders",
+    "question": "Who can see projects stored in a private folder?",
+    "expected_phrases": ["only the allowed users and groups"]
+  },
+  {
+    "id": "guardrail-pii",
+    "question": "How can the system detect and hide personally identifiable information?",
+    "expected_phrases": ["PII Protection", "detect and mask Personally Identifiable Information"]
+  },
+  {
+    "id": "secret-management",
+    "question": "Why should API keys and credentials be stored in environment variables?",
+    "expected_phrases": ["keep credentials out of your workflow"]
+  },
+  {
+    "id": "human-in-the-loop",
+    "question": "How can an agent pause execution and request clarification from a user?",
+    "expected_phrases": ["pause execution", "only works inside the Chat Assistant interface"]
+  },
+  {
+    "id": "multi-agent-orchestration",
+    "question": "When should multiple LLM steps run sequentially or in parallel?",
+    "expected_phrases": ["Sequential Orchestration", "Parallel Orchestration"]
+  },
+  {
+    "id": "observability-traces",
+    "question": "Which execution details should be available for monitoring an assistant run?",
+    "expected_phrases": ["per-step traces", "token counts, latency"]
+  },
+  {
+    "id": "reliability-fallbacks",
+    "question": "Which documentation topics help diagnose failures and configure fallback behavior?",
+    "expected_phrases": ["Fallback & Error Handling", "Troubleshoot a Workflow"]
+  },
+  {
+    "id": "gold-platform-overview",
+    "question": "What can teams build and deploy with StackAI?",
+    "expected_phrases": ["building, deploying, and governing AI agents"],
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"],
+    "relevant_chunk_ids": ["3721dd71-7d87-5c0a-ad4b-9e47948edfae"]
+  },
+  {
+    "id": "gold-security-compliance",
+    "question": "Which compliance and PII protections does StackAI describe?",
+    "expected_phrases": ["SOC 2 Type II", "PII Protection"],
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"],
+    "relevant_chunk_ids": ["a4e7fa00-e4da-5363-8409-f736ca25684c"]
+  },
+  {
+    "id": "gold-rbac-purpose",
+    "question": "What resources and actions are controlled by StackAI RBAC?",
+    "expected_phrases": ["Projects", "Connections", "Organization settings"],
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"],
+    "relevant_chunk_ids": ["34bcd757-bd95-597e-a22d-47a6cd27133f"]
+  },
+  {
+    "id": "gold-private-folder-access",
+    "question": "How do private folders limit project visibility?",
+    "expected_phrases": ["only the allowed users and groups"],
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"],
+    "relevant_chunk_ids": ["7f0206c9-a9f4-503c-9d29-172228267fe4"]
+  },
+  {
+    "id": "gold-project-locking",
+    "question": "What is the difference between project lock, RBAC, and folder access?",
+    "expected_phrases": ["prevents edits and publishing", "controls who can see projects"],
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"],
+    "relevant_chunk_ids": [
+      "b2ac7c2a-8fa1-5472-a831-160738575604",
+      "1c0f9f27-70f7-50eb-8229-6b37b74c1a90"
+    ]
+  },
+  {
+    "id": "gold-adlc",
+    "question": "How does the Agentic Development Lifecycle make deployments safer?",
+    "expected_phrases": ["staged deployments and reviews"],
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"],
+    "relevant_chunk_ids": ["b591289e-c93f-52a9-a3e6-d247c9c49496"]
+  },
+  {
+    "id": "gold-scim-benefits",
+    "question": "What user lifecycle tasks does SCIM automate in StackAI?",
+    "expected_phrases": ["Provision users", "Deprovision users", "Sync groups"],
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"],
+    "relevant_chunk_ids": ["be1cce6b-1fba-5bc1-867d-ff77bd9a338a"]
+  },
+  {
+    "id": "gold-environment-variables",
+    "question": "Why should workflow secrets use environment variables?",
+    "expected_phrases": ["keep credentials out of your workflow"],
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"],
+    "relevant_chunk_ids": ["0adf1b6f-ee9f-5bbf-8863-a5633e2a895a"]
+  },
+  {
+    "id": "gold-generative-ai",
+    "question": "What is Generative AI and what content can it create?",
+    "expected_phrases": ["text, images, music, and even synthetic voices"],
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"],
+    "relevant_chunk_ids": ["24a27268-13dc-5b3c-bd4f-c07ca12949d4"]
+  },
+  {
+    "id": "gold-multimodal-model",
+    "question": "What types of input can a multimodal model combine?",
+    "expected_phrases": ["text, images, audio, video"],
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"],
+    "relevant_chunk_ids": ["f2178b06-e14c-574b-bf8e-badf2e5bd3f8"]
+  },
+  {
+    "id": "gold-implementation-timeline",
+    "question": "What does the three-month StackAI implementation timeline cover?",
+    "expected_phrases": ["Month 1", "Month 2", "Month 3"],
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"],
+    "relevant_chunk_ids": ["d5a25b3c-9bc8-5e25-a6e5-0e18d392bdcf"]
+  },
+  {
+    "id": "gold-prompt-xml-tags",
+    "question": "Why should long prompts group related inputs with XML tags?",
+    "expected_phrases": ["where certain associated blocks of information begin and end"],
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"],
+    "relevant_chunk_ids": ["8bfed94b-728a-5bdd-a3ca-9bd95662dbc9"]
+  },
+  {
+    "id": "gold-multiple-llms",
+    "question": "When should multiple LLM nodes run sequentially versus in parallel?",
+    "expected_phrases": ["Sequential Orchestration", "Parallel Orchestration"],
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"],
+    "relevant_chunk_ids": ["c5fd2303-5246-56fb-967c-d6101b2333fb"]
+  },
+  {
+    "id": "gold-agent-node-provider",
+    "question": "Can the AI Agent Node switch between model providers?",
+    "expected_phrases": ["provider-agnostic"],
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"],
+    "relevant_chunk_ids": ["3f317119-ea0d-56ac-b752-d0b9e89788e4"]
+  },
+  {
+    "id": "gold-tool-selection",
+    "question": "How does an LLM choose and invoke tools, and when is a separate node preferable?",
+    "expected_phrases": ["autonomously decide", "outside node"],
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"],
+    "relevant_chunk_ids": [
+      "b8d7ad1b-0de6-5a75-ab0f-913458a94127",
+      "6d4be3f4-ba37-5b98-91bc-d76e22f14b7a"
+    ]
+  },
+  {
+    "id": "gold-knowledge-source-choice",
+    "question": "When should I use a Knowledge Base instead of Search Connected Apps?",
+    "expected_phrases": ["indexed copy", "always up to date"],
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"],
+    "relevant_chunk_ids": [
+      "cfdc3652-be1f-54ce-97cb-4ee4f01b33d0",
+      "6fca9585-2fc6-5ccd-9beb-f102bb450e0b"
+    ]
+  },
+  {
+    "id": "gold-memory-modalities",
+    "question": "Which LLM memory modalities are available and how does Sliding Window work?",
+    "expected_phrases": ["Sliding Window", "Sliding Window with Input"],
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"],
+    "relevant_chunk_ids": [
+      "7fc44317-8422-56dc-8502-00ff4ce69f00",
+      "866bd65c-cade-5760-9151-72627789a9ea"
+    ]
+  },
+  {
+    "id": "gold-citations-setting",
+    "question": "What does enabling citations on an LLM node provide?",
+    "expected_phrases": ["references", "external sources or uploaded documents"],
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"],
+    "relevant_chunk_ids": ["203a288a-132d-57c8-9123-a0878ca1fd10"]
+  },
+  {
+    "id": "gold-kb-search-parameters",
+    "question": "Where can retrieval search parameters be configured for a knowledge base?",
+    "expected_phrases": ["Knowledge Base Node", "Search Knowledge Base Tool"],
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"],
+    "relevant_chunk_ids": ["6b361f96-a4f2-5d3f-a65c-9eda861af599"]
+  },
+  {
+    "id": "gold-human-input-tool",
+    "question": "How does Ask Human pause a workflow and where can the tool run?",
+    "expected_phrases": ["pause execution", "only works inside the Chat Assistant interface"],
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"],
+    "relevant_chunk_ids": [
+      "3e9318c6-5808-52b9-9fa3-8d6a46345947",
+      "44858e62-0a64-54ba-954f-6e8224e2432c"
+    ]
+  }
+]
