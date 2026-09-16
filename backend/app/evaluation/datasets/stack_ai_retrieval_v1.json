@@ -1,0 +1,102 @@
+[
+  {
+    "id": "workflow-builder-purpose",
+    "question": "What is the Stack AI Workflow Builder?",
+    "expected_phrases": ["drag-and-drop", "workflow builder"]
+  },
+  {
+    "id": "workflow-custom-code",
+    "question": "How can technical users add custom code to a workflow?",
+    "expected_phrases": ["Code node", "Python"]
+  },
+  {
+    "id": "workflow-custom-api",
+    "question": "How can a workflow call a custom API?",
+    "expected_phrases": ["API node", "custom"]
+  },
+  {
+    "id": "workflow-tools",
+    "question": "How can an LLM node take autonomous actions?",
+    "expected_phrases": ["tools", "function calling"]
+  },
+  {
+    "id": "workflow-integrations",
+    "question": "What kinds of integrations are available in the Workflow Builder?",
+    "expected_phrases": ["integrations", "Storage & File Systems"]
+  },
+  {
+    "id": "local-llm-default-connection",
+    "question": "How do I configure a default local LLM connection?",
+    "expected_phrases": ["Default Connection", "Local LLMs"]
+  },
+  {
+    "id": "local-llm-connection-manager",
+    "question": "Where are LLM connections stored and managed?",
+    "expected_phrases": ["Connections Manager"]
+  },
+  {
+    "id": "local-llm-disable-keys",
+    "question": "How can an organization disable Stack AI API key usage?",
+    "expected_phrases": ["disable all StackAI API Keys", "Feature Access"]
+  },
+  {
+    "id": "python-node-purpose",
+    "question": "What is the Python node used for?",
+    "expected_phrases": ["custom Python code", "advanced data processing"]
+  },
+  {
+    "id": "python-node-inputs",
+    "question": "How does Python code access outputs from connected nodes?",
+    "expected_phrases": ["dashes replaced with underscores", "node ID"]
+  },
+  {
+    "id": "python-node-output",
+    "question": "How should a Python node return its output?",
+    "expected_phrases": ["return statement", "output variable"]
+  },
+  {
+    "id": "routing-purpose",
+    "question": "What does the AI Routing node do?",
+    "expected_phrases": ["intent detection", "direct user input"]
+  },
+  {
+    "id": "routing-default-category",
+    "question": "Why should an AI Routing node include a default category?",
+    "expected_phrases": ["Always Include a Default", "ambiguous"]
+  },
+  {
+    "id": "routing-branches",
+    "question": "How does AI Routing support dynamic workflow branching?",
+    "expected_phrases": ["Dynamic Workflow Branching", "downstream"]
+  },
+  {
+    "id": "architecture-multiple-documents",
+    "question": "Which architecture is recommended for asking questions over several documents?",
+    "expected_phrases": ["Ask questions to several documents", "Offline Data Loaders"]
+  },
+  {
+    "id": "architecture-vector-database",
+    "question": "Which components are used for research with a vector database?",
+    "expected_phrases": ["Data Loaders & Vector Databases", "VectorDB"]
+  },
+  {
+    "id": "architecture-document-reader",
+    "question": "Which components can aggregate data from a document reader?",
+    "expected_phrases": ["Document Readers", "Doc Q&A"]
+  },
+  {
+    "id": "chat-feedback",
+    "question": "Can the Chat Assistant collect user feedback?",
+    "expected_phrases": ["thumbs up", "thumbs down"]
+  },
+  {
+    "id": "chat-show-steps",
+    "question": "How can users see which workflow parts are processing?",
+    "expected_phrases": ["Show steps", "processing"]
+  },
+  {
+    "id": "chat-attachments",
+    "question": "How can file attachments be enabled in the Chat Assistant?",
+    "expected_phrases": ["Show attachment icon", "attach files"]
+  }
+]

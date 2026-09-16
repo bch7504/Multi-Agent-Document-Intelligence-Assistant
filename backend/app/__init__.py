@@ -1,0 +1,2 @@
+"""Document Intelligence backend application."""
+

@@ -1,7 +1,11 @@
+"""Load, chunk, and serialize documents from web sources."""
+
+import json
 import os
 import re
-import json
+from hashlib import sha256
 from urllib.parse import urlparse
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 os.environ.setdefault("USER_AGENT", "RAG-LangChain/1.0")
 
@@ -13,6 +17,93 @@ from bs4 import BeautifulSoup
 DEFAULT_HEADERS = {"User-Agent": os.environ["USER_AGENT"]}
 DEFAULT_DOCUMENTATION_URL = "https://docs.stackai.com/llms-full.txt"
 CRAWL_EXCLUDED_PATHS = ("~gitbook/image", "spaces/", "files/")
+DEFAULT_CHUNK_SIZE_TOKENS = 500
+DEFAULT_CHUNK_OVERLAP_TOKENS = 75
+CHUNK_SEPARATORS = ("\n\n", "\n", ". ", "! ", "? ", "; ", " ", "")
+
+
+def _positive_int_env(name: str, default: int, *, minimum: int = 1) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    try:
+        value = int(raw_value)
+    except ValueError as error:
+        raise ValueError(f"{name} must be an integer") from error
+    if value < minimum:
+        raise ValueError(f"{name} must be at least {minimum}")
+    return value
+
+
+def build_text_splitter() -> RecursiveCharacterTextSplitter:
+    """Build a token-aware splitter while preserving paragraph boundaries."""
+    chunk_size = _positive_int_env(
+        "CHUNK_SIZE_TOKENS",
+        DEFAULT_CHUNK_SIZE_TOKENS,
+    )
+    chunk_overlap = _positive_int_env(
+        "CHUNK_OVERLAP_TOKENS",
+        DEFAULT_CHUNK_OVERLAP_TOKENS,
+        minimum=0,
+    )
+    if chunk_overlap >= chunk_size:
+        raise ValueError("CHUNK_OVERLAP_TOKENS must be smaller than CHUNK_SIZE_TOKENS")
+
+    return RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+        encoding_name=os.getenv("CHUNK_TOKEN_ENCODING", "cl100k_base"),
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        separators=list(CHUNK_SEPARATORS),
+        add_start_index=True,
+    )
+
+
+def _stable_uuid(value: object, fallback: str) -> UUID:
+    if value:
+        try:
+            return UUID(str(value))
+        except ValueError:
+            return uuid5(NAMESPACE_URL, str(value))
+    return uuid5(NAMESPACE_URL, fallback)
+
+
+def add_chunk_provenance(documents, source_name: str | None = None):
+    """Attach stable document/chunk identifiers required for scoped retrieval."""
+    document_indexes: dict[str, int] = {}
+    for document in documents:
+        metadata = document.metadata
+        source = str(metadata.get("source") or source_name or "unknown-source")
+        document_id = _stable_uuid(
+            metadata.get("document_id"),
+            f"document::{source_name or source}",
+        )
+        document_key = str(document_id)
+        chunk_index = document_indexes.get(document_key, 0)
+        document_indexes[document_key] = chunk_index + 1
+        try:
+            start_index = max(0, int(metadata.get("start_index") or 0))
+        except (TypeError, ValueError):
+            start_index = 0
+        content_digest = sha256(document.page_content.encode("utf-8")).hexdigest()
+        chunk_id = _stable_uuid(
+            metadata.get("chunk_id"),
+            f"chunk::{document_id}::{chunk_index}::{start_index}::{content_digest}",
+        )
+        metadata.update(
+            {
+                "document_id": str(document_id),
+                "chunk_id": str(chunk_id),
+                "chunk_index": chunk_index,
+                "start_index": start_index,
+                "source_name": str(
+                    metadata.get("source_name")
+                    or source_name
+                    or metadata.get("title")
+                    or source
+                )[:255],
+            }
+        )
+    return documents
 
 
 def _validate_url(url: str) -> str:
@@ -43,7 +134,7 @@ def metadata_extractor(raw_content: str, url: str, response) -> dict:
         metadata["language"] = str(html.get("lang") or "")[:32]
     return metadata
 
-def bs4_extractor( html:str) -> str:
+def bs4_extractor(html: str) -> str:
     """
     Hàm trích xuất nội dung văn bản từ HTML sử dụng BeautifulSoup
     Args:
@@ -71,17 +162,12 @@ def crawl_web(url_data):
     docs = loader.load()# tải nội dung
     print('length:', len(docs)) # in số lượng tài liệu đã tải
     
-    #chia nhỏ văn bản thành các đoạn 1000 ký tự với chồng lấp 500 ký tự
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=500,
-        
-    )
-    all_splits = text_splitter.split_documents(docs)
+    text_splitter = build_text_splitter()
+    all_splits = add_chunk_provenance(text_splitter.split_documents(docs))
     print('length_all_split: ', len(all_splits)) # in số lượng đoạn văn bản đã chia nhỏ
     return all_splits
 
-def web_base_loader(url_data):
+def web_base_loader(url_data, source_name: str | None = None):
     """
     Hàm tải dữ liệu từ một URL dơn (không đệ quy) không chui vào các link con
     Args:
@@ -97,13 +183,11 @@ def web_base_loader(url_data):
     docs = loader.load()
     print('length:', len(docs)) # in số lượng tài liệu đã tải
     
-    #chia nhỏ văn bản thành các đoạn 1000 ký tự với chồng lấp 500 ký tự
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=500,
-        
+    text_splitter = build_text_splitter()
+    all_splits = add_chunk_provenance(
+        text_splitter.split_documents(docs),
+        source_name=source_name,
     )
-    all_splits = text_splitter.split_documents(docs)
     return all_splits
 
 def save_data_locally(documents, filename, directory):
@@ -140,8 +224,12 @@ def main():
     2. Lưu dữ liệu vào file JSON
     3. In ra kết quả crawl để kiểm tra 
     """
-    # Crawl dữ liệu từ web stack-ai
-    data = crawl_web(DEFAULT_DOCUMENTATION_URL)
+    # llms-full.txt already contains the aggregated documentation. Loading it as
+    # a single resource avoids recursively following every link embedded in it.
+    data = web_base_loader(
+        DEFAULT_DOCUMENTATION_URL,
+        source_name="Stack AI Documentation",
+    )
     # Lưu dữ liệu vào thư mục data
     save_data_locally(data, "stack_ai.json", "data")
     print(f"Crawled and saved {len(data)} chunks")

@@ -3,13 +3,12 @@ langchain==1.3.11
 langchain-core==1.4.8
 langchain-community==0.4.2
 langchain-text-splitters==1.1.2
+tiktoken>=0.7,<1
 
 # LLM & Embeddings providers
 langchain-google-genai
-langchain-huggingface
 langchain-ollama
 langchain-openai
-sentence-transformers
 
 # Vector store
 langchain-milvus==0.3.3
@@ -18,14 +17,18 @@ langchain-milvus==0.3.3
 langgraph
 langchain-classic
 
-# Retriever
-rank-bm25
+# HTTP API
+fastapi[standard]
+
+# Persistence and PDF ingestion
+sqlalchemy>=2.0,<3
+alembic>=1.13,<2
+psycopg[binary]>=3.1,<4
+pypdf>=5,<7
+python-multipart>=0.0.9
 
 # Web crawling & parsing
 beautifulsoup4
-
-# Web UI
-streamlit
 
 # Environment variables
 python-dotenv
