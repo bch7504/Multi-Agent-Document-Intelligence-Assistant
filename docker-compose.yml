@@ -1,4 +1,87 @@
 services:
+  api:
+    container_name: document-assistant-api
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      APP_ENV: development
+      API_V1_PREFIX: /api/v1
+      CORS_ORIGINS: http://localhost:5173
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-document_assistant}:${POSTGRES_PASSWORD:-document_assistant_dev}@postgres:5432/${POSTGRES_DB:-document_assistant}
+      DOCUMENT_STORAGE_PATH: /data/uploads
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-26214400}
+      DOCUMENT_COLLECTION_NAME: ${DOCUMENT_COLLECTION_NAME:-document_chunks}
+      MILVUS_URI: http://standalone:19530
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      OLLAMA_BASE_URL: ${OLLAMA_DOCKER_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen3:8b}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-qwen3-embedding:0.6b}
+      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-models/gemini-embedding-001}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-5.6-luna}
+      OPENROUTER_EMBEDDING_MODEL: ${OPENROUTER_EMBEDDING_MODEL:-openai/text-embedding-3-small}
+      OPENROUTER_SITE_URL: ${OPENROUTER_SITE_URL:-http://localhost:5173}
+      OPENROUTER_APP_NAME: ${OPENROUTER_APP_NAME:-RAG LangChain}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.6-luna}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-}
+      CHUNK_SIZE_TOKENS: ${CHUNK_SIZE_TOKENS:-500}
+      CHUNK_OVERLAP_TOKENS: ${CHUNK_OVERLAP_TOKENS:-75}
+      CHUNK_TOKEN_ENCODING: ${CHUNK_TOKEN_ENCODING:-cl100k_base}
+      RETRIEVAL_CANDIDATE_K: ${RETRIEVAL_CANDIDATE_K:-20}
+      RETRIEVAL_RRF_K: ${RETRIEVAL_RRF_K:-60}
+      RETRIEVAL_PROFILE: ${RETRIEVAL_PROFILE:-hybrid_rrf}
+      CONTEXT_MAX_CHUNKS: ${CONTEXT_MAX_CHUNKS:-6}
+      CONTEXT_MAX_CHARACTERS: ${CONTEXT_MAX_CHARACTERS:-24000}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/uploads:/data/uploads
+    command:
+      [
+        "/bin/sh",
+        "-c",
+        "alembic -c backend/alembic.ini upgrade head && fastapi run backend/app/main.py --port 8000",
+      ]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/live')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      postgres:
+        condition: service_healthy
+      standalone:
+        condition: service_healthy
+
+  postgres:
+    container_name: document-assistant-postgres
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-document_assistant}
+      POSTGRES_USER: ${POSTGRES_USER:-document_assistant}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-document_assistant_dev}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-document_assistant} -d ${POSTGRES_DB:-document_assistant}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   etcd:
     container_name: milvus-etcd
     image: quay.io/coreos/etcd:v3.5.25
@@ -18,7 +101,7 @@ services:
 
   minio:
     container_name: milvus-minio
-    image: minio/minio:RELEASE.2024-05-28T17-19-04Z
+    image: quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z
     environment:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
@@ -36,7 +119,7 @@ services:
 
   standalone:
     container_name: milvus-standalone
-    image: milvusdb/milvus:v2.6.21
+    image: milvusdb/milvus:v2.6.23
     command: ["milvus", "run", "standalone"]
     security_opt:
       - seccomp:unconfined
