@@ -7,7 +7,12 @@ from sqlalchemy import engine_from_config, pool
 
 from backend.app.core.config import get_settings
 from backend.app.database.postgres import Base
-from backend.app.models import DocumentRecord  # noqa: F401
+from backend.app.models import (  # noqa: F401
+    AssistantRunRecord,
+    ConversationRecord,
+    DocumentRecord,
+    MessageRecord,
+)
 
 
 config = context.config

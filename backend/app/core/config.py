@@ -30,6 +30,7 @@ class Settings:
     max_upload_bytes: int
     milvus_uri: str
     document_collection_name: str
+    memory_max_messages: int
 
 
 @lru_cache(maxsize=1)
@@ -54,4 +55,5 @@ def get_settings() -> Settings:
             "DOCUMENT_COLLECTION_NAME",
             "document_chunks",
         ),
+        memory_max_messages=int(os.getenv("MEMORY_MAX_MESSAGES", "12")),
     )

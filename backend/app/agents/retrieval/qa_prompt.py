@@ -11,11 +11,17 @@ Rules:
 """
 
 
-def build_qa_prompt(question: str, evidence: str) -> str:
+def build_qa_prompt(
+    question: str,
+    evidence: str,
+    feedback: str | None = None,
+) -> str:
+    retry = f"\nReviewer feedback to fix:\n{feedback}\n" if feedback else ""
     return f"""Question:
 {question}
 
 Evidence:
 {evidence}
+{retry}
 
 Produce an answer and select the chunk IDs that directly support it."""
