@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from typing import Any
 
 from pydantic import BaseModel, Field
+from langchain_core.runnables import RunnableConfig
 
 
 MAX_HISTORY_TURNS = 6
@@ -41,7 +42,12 @@ def _bounded_history(messages: Iterable[dict[str, str]]) -> list[dict[str, str]]
     return list(reversed(selected))
 
 
-def rewrite_query(question: str, history: Iterable[dict[str, str]], llm: Any) -> str:
+def rewrite_query(
+    question: str,
+    history: Iterable[dict[str, str]],
+    llm: Any,
+    config: RunnableConfig | None = None,
+) -> str:
     question = question.strip()
     if not question:
         raise ValueError("Question must not be blank")
@@ -61,6 +67,7 @@ def rewrite_query(question: str, history: Iterable[dict[str, str]], llm: Any) ->
                 f"<conversation>\n{transcript}\n</conversation>\n"
                 f"<latest_question>{question}</latest_question>",
             ),
-        ]
+        ],
+        config=config,
     )
     return RewrittenQuery.model_validate(raw).query.strip()

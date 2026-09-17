@@ -17,7 +17,7 @@ class _StructuredLlm:
         self.schema = schema
         return self
 
-    def invoke(self, messages):
+    def invoke(self, messages, config=None):
         self.messages = messages
         return self.response
 
