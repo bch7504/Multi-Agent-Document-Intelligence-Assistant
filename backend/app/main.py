@@ -5,9 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.api.router import api_router
 from backend.app.core.config import get_settings
+from backend.app.core.observability import (
+    RequestObservabilityMiddleware,
+    configure_logging,
+)
 
 
 def create_app() -> FastAPI:
+    configure_logging()
     settings = get_settings()
     application = FastAPI(
         title=settings.app_name,
@@ -22,6 +27,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    application.add_middleware(RequestObservabilityMiddleware)
     application.include_router(api_router, prefix=settings.api_v1_prefix)
     return application
 

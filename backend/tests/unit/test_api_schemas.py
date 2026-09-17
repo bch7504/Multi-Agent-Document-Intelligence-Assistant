@@ -55,6 +55,15 @@ class ApiSchemaTests(unittest.TestCase):
                 "status": DocumentStatus.READY,
                 "pageCount": 10,
                 "chunkCount": 42,
+                "sections": [
+                    {
+                        "id": str(uuid4()),
+                        "title": "Retrieval",
+                        "startChunkIndex": 3,
+                        "endChunkIndex": 5,
+                        "chunkCount": 3,
+                    }
+                ],
                 "createdAt": now,
                 "updatedAt": now,
             }
@@ -63,6 +72,7 @@ class ApiSchemaTests(unittest.TestCase):
         payload = document.model_dump(mode="json", by_alias=True)
         self.assertEqual(payload["mimeType"], "application/pdf")
         self.assertEqual(payload["pageCount"], 10)
+        self.assertEqual(payload["sections"][0]["startChunkIndex"], 3)
         self.assertNotIn("mime_type", payload)
 
 

@@ -1,0 +1,20 @@
+[
+  {
+    "id": "platform-purpose",
+    "question": "What is the main purpose of Stack AI?",
+    "reference": "Stack AI is an enterprise platform for building, deploying, and governing AI agents that automate business processes. Teams can visually create workflows, connect knowledge bases, tools, integrations, and business systems, then deploy agents through chat, forms, APIs, or internal applications with enterprise controls and observability.",
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"]
+  },
+  {
+    "id": "visual-workflows",
+    "question": "How can users build AI workflows in Stack AI?",
+    "reference": "Users can start from scratch or from a template, then use the drag-and-drop workflow builder to connect nodes into an agent workflow. They can add AI models, knowledge bases for RAG, external integrations, MCP servers, and function-calling tools. The built-in assistant can help with the workflow, which can then be published to interfaces such as chat or forms and monitored with run traces.",
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"]
+  },
+  {
+    "id": "deployment-governance",
+    "question": "Which enterprise lifecycle capabilities does Stack AI provide for AI agents?",
+    "reference": "Stack AI covers the enterprise agent lifecycle: building workflows with visual tools, models, knowledge bases, integrations, and RAG; deploying agents to chat, forms, APIs, and internal applications; moving work through development, review, and production; monitoring runs with analytics and notifications; and governing access with RBAC, permissions, authentication, MFA, SSO, compliance controls, on-premises options, and local-model support.",
+    "document_ids": ["07b69e16-d0ee-5f07-9fca-a60edbebcd35"]
+  }
+]

@@ -14,12 +14,16 @@ from backend.app.main import app
 class HealthApiTests(unittest.TestCase):
     def test_liveness_does_not_require_external_services(self):
         with TestClient(app) as client:
-            response = client.get("/api/v1/health/live")
+            response = client.get(
+                "/api/v1/health/live",
+                headers={"X-Request-ID": "test-request-id"},
+            )
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["version"], "0.1.0")
+        self.assertEqual(response.headers["X-Request-ID"], "test-request-id")
 
     def test_readiness_checks_postgres_and_milvus(self):
         engine = create_engine(

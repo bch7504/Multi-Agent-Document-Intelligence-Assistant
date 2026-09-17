@@ -90,6 +90,7 @@ class AgentTests(unittest.TestCase):
             llm = create_llm("OpenRouter", openrouter_model="openai/gpt-5.6-luna")
         self.assertEqual(llm.model_name, "openai/gpt-5.6-luna")
         self.assertEqual(str(llm.openai_api_base), "https://openrouter.ai/api/v1")
+        self.assertTrue(llm.stream_usage)
 
     def test_openai_client_uses_selected_model(self):
         with patch.dict(
@@ -99,6 +100,12 @@ class AgentTests(unittest.TestCase):
         ):
             llm = create_llm("openai")
         self.assertEqual(llm.model_name, "gpt-5.6-luna")
+        self.assertTrue(llm.stream_usage)
+
+    def test_request_can_override_openai_model(self):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}, clear=True):
+            llm = create_llm("openai", model_name="custom-chat-model")
+        self.assertEqual(llm.model_name, "custom-chat-model")
 
     def test_unknown_provider_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "Unsupported LLM provider"):

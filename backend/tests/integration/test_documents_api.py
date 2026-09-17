@@ -26,6 +26,7 @@ class DocumentsApiTests(unittest.TestCase):
         Base.metadata.create_all(self.engine)
         self.session = Session(self.engine, expire_on_commit=False)
         self.indexed_chunks = []
+        self.embedding_selections = []
         self.deleted_document_ids = []
 
         def parse_pdf(path, document_id, name):
@@ -44,8 +45,9 @@ class DocumentsApiTests(unittest.TestCase):
                 2,
             )
 
-        def index_chunks(chunks):
+        def index_chunks(chunks, embedding_provider=None, embedding_model=None):
             self.indexed_chunks.extend(chunks)
+            self.embedding_selections.append((embedding_provider, embedding_model))
             return len(chunks)
 
         self.service = DocumentService(
@@ -54,7 +56,11 @@ class DocumentsApiTests(unittest.TestCase):
             parser=parse_pdf,
             indexer=index_chunks,
             chunk_deleter=lambda document_id: self.deleted_document_ids.append(document_id) or 1,
-            embedding_name=lambda: "openai:text-embedding-3-small",
+            embedding_name=lambda provider=None, model=None: (
+                f"{provider}:{model}"
+                if provider and model
+                else "openai:text-embedding-3-small"
+            ),
         )
         app.dependency_overrides[get_document_service] = lambda: self.service
         self.client = TestClient(app)
@@ -90,6 +96,26 @@ class DocumentsApiTests(unittest.TestCase):
         self.assertEqual(deleted.status_code, 204)
         self.assertEqual(len(self.deleted_document_ids), 1)
         self.assertEqual(self.client.get("/api/v1/documents").json()["total"], 0)
+
+    def test_upload_applies_selected_embedding_model(self):
+        upload = self.client.post(
+            "/api/v1/documents",
+            files={"file": ("guide.pdf", io.BytesIO(b"%PDF-1.4\ntest"), "application/pdf")},
+            data={
+                "embedding_provider": "openrouter",
+                "embedding_model": "openai/text-embedding-3-large",
+            },
+        )
+
+        self.assertEqual(upload.status_code, 201)
+        self.assertEqual(
+            upload.json()["embeddingModel"],
+            "openrouter:openai/text-embedding-3-large",
+        )
+        self.assertEqual(
+            self.embedding_selections[-1],
+            ("openrouter", "openai/text-embedding-3-large"),
+        )
 
 
 if __name__ == "__main__":

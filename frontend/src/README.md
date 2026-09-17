@@ -1,5 +1,10 @@
 # Production frontend source
 
-This directory is reserved for the React/TypeScript frontend. Pages, components, services, hooks, types, store, and utilities will be implemented against the versioned FastAPI contract.
+- `components/documents`: PDF upload, lifecycle state, and multi-document scope.
+- `components/chat`: assistant workspace and citation rendering.
+- `components/quiz`: interactive quiz answers and explanations.
+- `components/agents`: graph trace, review, retry, latency, and token usage.
+- `services`: typed FastAPI client.
+- `types`: camelCase API contracts shared by UI components.
 
-The current visual prototype remains the standalone `../mock.html`; it does not connect to this source tree or to the backend.
+This application does not reuse business logic from `../mock.html`.

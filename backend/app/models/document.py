@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import BigInteger, DateTime, Integer, String, Text, Uuid
+from sqlalchemy import JSON, BigInteger, DateTime, Integer, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.database.postgres import Base
@@ -37,6 +37,7 @@ class DocumentRecord(Base):
     )
     page_count: Mapped[int | None] = mapped_column(Integer)
     chunk_count: Mapped[int | None] = mapped_column(Integer)
+    sections: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
     embedding_model: Mapped[str | None] = mapped_column(String(255))
     error_message: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(

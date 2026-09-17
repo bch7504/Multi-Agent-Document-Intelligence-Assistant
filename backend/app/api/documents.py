@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from backend.app.database.postgres import get_db_session
@@ -30,9 +30,15 @@ def get_document_service(
 async def upload_document(
     file: Annotated[UploadFile, File(description="PDF document")],
     service: Annotated[DocumentService, Depends(get_document_service)],
+    embedding_provider: Annotated[str | None, Form()] = None,
+    embedding_model: Annotated[str | None, Form()] = None,
 ) -> DocumentRead:
     try:
-        record = await service.create_from_upload(file)
+        record = await service.create_from_upload(
+            file,
+            embedding_provider=embedding_provider,
+            embedding_model=embedding_model,
+        )
     except UnsupportedDocumentError as error:
         raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=str(error)) from error
     except UploadTooLargeError as error:

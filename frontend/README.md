@@ -1,13 +1,26 @@
-# Frontend workspace
+# Frontend
 
-`mock.html` là bản mock giao diện độc lập để duyệt layout và interaction cơ bản.
+`frontend/` contains two independent interfaces:
 
-- Không gọi API.
-- Không cần Node.js hoặc Python.
-- Không chứa dữ liệu thật.
-- Có thể mở trực tiếp bằng trình duyệt.
-- Nút `Local` cho phép duyệt UX chọn/tải chat và embedding models; tiến trình tải chỉ là mô phỏng.
+- `mock.html`: the original standalone visual prototype. It never calls the backend.
+- `src/`: the production React/TypeScript application backed by `/api/v1`.
 
-API key không được nhập hoặc lưu trong static frontend. Người dùng copy `.env.example` thành `.env` và chỉ điền key cho provider backend đã chọn.
+The production application supports server-backed chat/embedding model selection,
+custom model IDs, PDF upload, document selection, QA, summary, quiz, citations,
+reviewer status, token usage, and Agent Trace. Embedding selection is locked once
+ready documents exist because changing it requires re-indexing Milvus.
 
-Frontend React/TypeScript production sẽ được tạo sau khi API contract của FastAPI ổn định. Không phát triển business logic dựa trên code JavaScript trong mock.
+Run locally:
+
+```bash
+npm install
+npm run dev
+```
+
+Or run the full stack and open <http://localhost:3000>:
+
+```bash
+docker compose up -d --build
+```
+
+API keys stay in backend environment variables. The browser never receives them.

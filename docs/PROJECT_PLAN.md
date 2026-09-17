@@ -26,28 +26,24 @@ Project được phát triển tăng dần từ baseline đang chạy. Không vi
 - Milvus standalone và cơ chế cập nhật collection qua staging/backup.
 - Hybrid retrieval native trong Milvus gồm dense vector, BM25 và RRF.
 - LangChain agent có retrieval tool.
+- LangGraph QA, map-reduce Summary và Quiz dùng chung deterministic validator.
+- Grounding reviewer với retry về retrieval/generation, tối đa hai lần.
+- PostgreSQL recent-window memory và assistant run audit.
+- React/TypeScript frontend production nối FastAPI qua Nginx.
+- RAGAS versioned benchmark, structured logs, token usage và run audit endpoint.
+- Full-stack Docker Compose và CI cho backend/frontend.
 - Gemini, OpenRouter, OpenAI và Ollama chat providers.
 - Unit/smoke tests không yêu cầu dịch vụ bên ngoài.
 
 ### Chưa có
 
-- Upload và parse PDF theo trang.
-- PDF page metadata đầy đủ cho document lifecycle.
-- FastAPI và API contract ổn định.
-- PostgreSQL cho document/conversation metadata.
-- LangGraph workflow được định nghĩa rõ ràng.
-- Summary, Quiz và Review workflow.
-- Persistent conversation memory.
-- Gold evaluation dataset, RAGAS và tracing production.
-- Docker Compose cho toàn bộ ứng dụng.
+- Authentication/multi-tenant, OCR, DOCX/PPTX và semantic long-term memory thuộc V2.
 
 ### Hạn chế cần xử lý
 
 - Benchmark `v2` đã có 20 gold qrels thủ công và 20 silver cases bám theo các năng lực của Document Assistant; cần tiếp tục bổ sung gold qrels cho PDF người dùng tải lên.
 - Người dùng chọn trực tiếp tên collection; cách này không phù hợp với document lifecycle.
-- Câu trả lời hiện là chuỗi text, chưa có output schema và citation có thể kiểm chứng.
-- Chưa có web frontend production; file mock không chứa business logic và không gọi API.
-- Lịch sử hội thoại mất khi session kết thúc.
+- Memory hiện là recent conversation window; chưa có semantic long-term user memory.
 
 ## 3. Nguyên tắc thiết kế
 
@@ -289,7 +285,7 @@ START
 | Sprint 1 - API/schema baseline | Chưa cần | Optional | Health, contract và unit test phải chạy không cần external service. |
 | Sprint 2 - PDF/document lifecycle | Bắt buộc | Bắt buộc | PostgreSQL lưu document/status; Milvus lưu chunk/vector và provenance. |
 | Sprint 3 - Retrieval | Bắt buộc | Bắt buộc | Filter theo `document_id`; keyword search có thể dùng PostgreSQL FTS hoặc Milvus sparse search. |
-| Sprint 4 - LangGraph | Bắt buộc | Bắt buộc | Lưu run/conversation/checkpoint và truy xuất context. |
+| Sprint 4 - LangGraph | Bắt buộc | Bắt buộc | Xác thực document scope trong PostgreSQL, truy xuất context từ Milvus; checkpoint tạm thời nằm trong process. |
 | Sprint 5 - Memory/review | Bắt buộc | Bắt buộc | Persistent messages, review result, retry và audit trail. |
 | Sprint 6 - Deploy/evaluation | Bắt buộc | Bắt buộc | Full-stack runtime, evaluation records và observability metadata. |
 
@@ -326,6 +322,10 @@ Quyết định lưu trữ:
 - [x] Chạy live PostgreSQL, migration, FastAPI và Milvus; liveness/readiness đều đạt.
 - [ ] Chạy upload end-to-end với một PDF thật khi có file kiểm thử được chọn.
 - [x] Hoàn tất Sprint 3 cho corpus hiện tại: profiles, query rewrite, 40-case benchmark và báo cáo so sánh.
+- [x] Hoàn tất Sprint 4: LangGraph QA/Summary, structured auto routing, checkpointer theo conversation, unified API và trace; toàn bộ 74 test đạt.
+- [x] Hoàn tất Sprint 5: Quiz, deterministic validation, LLM reviewer, bounded retry, PostgreSQL conversation memory và input guardrails; toàn bộ 80 test đạt.
+- [x] Hoàn tất Sprint 6: React frontend thật, audit observability, token usage, RAGAS versioned benchmark, full-stack Docker Compose và CI.
+- [x] Đồng bộ model selector trên FE thật với backend catalog; chat model theo request, embedding model theo index và không lộ API key.
 
 ## 9. Roadmap triển khai
 
@@ -402,20 +402,20 @@ Mục tiêu: đưa orchestration rõ ràng vào hệ thống sau khi retrieval �
 
 Công việc:
 
-- Xây state, nodes, conditional edges và graph compilation.
-- Structured task resolver cho `task=auto`.
-- QA workflow: rewrite -> retrieve -> answer.
-- Summary workflow: resolve scope -> retrieve/map-reduce -> summarize.
-- Checkpointer theo conversation/thread.
-- Streaming event hoặc response từ FastAPI.
-- Unit test từng node và integration test đường đi trong graph.
+- [x] Xây state, nodes, conditional edges và graph compilation.
+- [x] Structured task resolver cho `task=auto`.
+- [x] QA workflow: rewrite -> retrieve -> answer.
+- [x] Summary workflow: resolve scope -> retrieve/map-reduce -> summarize.
+- [x] Checkpointer theo conversation/thread trong process; PostgreSQL persistence để Sprint 5.
+- [x] Structured response từ FastAPI qua `POST /api/v1/assistant/runs`.
+- [x] Unit test node/service và integration test đường đi trong graph/API.
 
 Definition of Done:
 
-- Một API xử lý được QA và Summary.
-- Explicit task bỏ qua supervisor/router.
-- Trace cho biết chính xác graph đã đi qua node nào.
-- QA và Summary đều có citation.
+- [x] Một API xử lý được QA và Summary.
+- [x] Explicit task bỏ qua supervisor/router.
+- [x] Trace cho biết chính xác graph đã đi qua node nào.
+- [x] QA và Summary đều có citation.
 
 ### Sprint 5 - Quiz, Review, Memory và Guardrails
 
@@ -423,20 +423,20 @@ Mục tiêu: hoàn thiện workflow và tăng độ tin cậy.
 
 Công việc:
 
-- Quiz output theo schema, có đáp án, giải thích và citation.
-- Deterministic validator kiểm tra citation, document scope và quiz schema.
-- LLM reviewer đánh giá grounding cho các trường hợp cần thiết.
-- Retry tối đa hai lần và route retry theo nguyên nhân lỗi.
-- Lưu conversation/message/run vào PostgreSQL.
-- Giới hạn history; dùng recent window hoặc conversation summary.
-- Guardrail cho file, input, document scope và instruction nằm trong tài liệu.
+- [x] Quiz output theo schema, có đáp án, giải thích và citation.
+- [x] Deterministic validator kiểm tra citation, document scope và quiz schema.
+- [x] LLM reviewer đánh giá grounding sau khi deterministic validation đạt.
+- [x] Retry tối đa hai lần và route retry theo nguyên nhân lỗi.
+- [x] Lưu conversation/message/run vào PostgreSQL.
+- [x] Giới hạn history bằng recent window 12 messages, có thể cấu hình.
+- [x] Guardrail cho file, input, document scope và instruction nằm trong tài liệu.
 
 Definition of Done:
 
-- Quiz đúng schema và chỉ có một đáp án hợp lệ cho mỗi câu.
-- Citation giả hoặc ngoài document scope bị chặn.
-- Follow-up question hoạt động sau khi restart ứng dụng.
-- Graph không thể lặp vô hạn.
+- [x] Quiz đúng schema và chỉ có một đáp án hợp lệ cho mỗi câu.
+- [x] Citation giả hoặc ngoài document scope bị chặn.
+- [x] Follow-up question hoạt động sau khi restart ứng dụng.
+- [x] Graph không thể lặp vô hạn.
 
 ### Sprint 6 - Evaluation, observability, UI và deploy
 
@@ -444,21 +444,21 @@ Mục tiêu: tạo bản demo portfolio có thể chạy lại và giải thích
 
 Công việc:
 
-- Tích hợp Langfuse hoặc tracing backend tương đương.
-- Ghi trace node, tool call, chunks, token, latency, lỗi và retry.
-- Chạy RAGAS trên benchmark; lưu config và kết quả có version.
-- Xây React/TypeScript frontend từ API contract; dùng mock HTML hiện tại làm tham chiếu giao diện.
-- UI upload, chọn nhiều document, Ask/Summarize/Quiz và xem citation.
-- Trang/expander Agent Trace.
-- Docker Compose cho API, UI, PostgreSQL và Milvus.
-- README gồm kiến trúc, trade-off, benchmark và demo scenario.
+- [x] Tích hợp tracing backend tương đương bằng PostgreSQL audit và structured JSON logs.
+- [x] Ghi trace node, chunks, token, latency, lỗi và retry.
+- [x] Chạy RAGAS trên benchmark; lưu config và kết quả có version.
+- [x] Xây React/TypeScript frontend từ API contract; giữ mock HTML làm tham chiếu độc lập.
+- [x] UI upload, chọn nhiều document, Ask/Summarize/Quiz và xem citation.
+- [x] Trang/expander Agent Trace.
+- [x] Docker Compose cho API, UI, PostgreSQL và Milvus.
+- [x] README gồm kiến trúc, trade-off, benchmark và demo scenario.
 
 Definition of Done:
 
-- Clone repo, cấu hình `.env` và chạy được bằng Docker Compose.
-- Demo đầy đủ upload -> QA/Summary/Quiz -> citation -> trace.
-- Evaluation có thể chạy lại bằng một command.
-- README đủ để người phỏng vấn hiểu quyết định kỹ thuật chính.
+- [x] Clone repo, cấu hình `.env` và chạy được bằng Docker Compose.
+- [x] Demo đầy đủ upload -> QA/Summary/Quiz -> citation -> trace.
+- [x] Evaluation có thể chạy lại bằng một command.
+- [x] README đủ để người phỏng vấn hiểu quyết định kỹ thuật chính.
 
 ## 10. Cấu trúc source mục tiêu
 
@@ -537,7 +537,7 @@ Code sẽ được chuyển theo từng vertical slice. Chỉ xóa compatibility
 - `docx.py` và `pptx.py` thuộc V2; MVP ưu tiên PDF và URL ingestion.
 - Backend dùng `assistant/runs` làm contract chính; có thể expose `chat.py` như adapter, không để chat transport quyết định graph design.
 - Chỉ retrieval agent có `agent.py` và `prompt.py` ở hiện tại. Các agent khác chỉ có package marker cho đến khi có implementation và test.
-- `Dockerfile`, React `package.json`, FastAPI `main.py` và `ci.yml` sẽ được thêm cùng runnable vertical slice tương ứng, không tạo placeholder không chạy được.
+- Dockerfile, React package, FastAPI entrypoint và CI đều thuộc runnable vertical slice; không giữ placeholder không chạy được.
 
 ### MVP
 
@@ -558,7 +558,6 @@ Code sẽ được chuyển theo từng vertical slice. Chỉ xóa compatibility
 - Long-term user memory.
 - Background worker/queue quy mô lớn.
 - Advanced reranking.
-- React frontend.
 
 ## 12. Chất lượng và quy tắc hoàn thành chung
 

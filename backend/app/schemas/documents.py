@@ -22,6 +22,14 @@ class DocumentSourceType(str, Enum):
     JSON = "json"
 
 
+class DocumentSectionRead(ApiModel):
+    id: UUID
+    title: str = Field(min_length=1, max_length=255)
+    start_chunk_index: int = Field(ge=0)
+    end_chunk_index: int = Field(ge=0)
+    chunk_count: int = Field(ge=1)
+
+
 class DocumentRead(ApiModel):
     id: UUID
     name: str = Field(min_length=1, max_length=255)
@@ -32,6 +40,7 @@ class DocumentRead(ApiModel):
     status: DocumentStatus
     page_count: int | None = Field(default=None, ge=0)
     chunk_count: int | None = Field(default=None, ge=0)
+    sections: list[DocumentSectionRead] = Field(default_factory=list)
     embedding_model: str | None = Field(default=None, max_length=255)
     error_message: str | None = Field(default=None, max_length=1_000)
     created_at: datetime

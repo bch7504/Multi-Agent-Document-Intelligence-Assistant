@@ -74,6 +74,23 @@ class SeedDataTests(unittest.TestCase):
                 "openai:text-embedding-3-large",
             )
 
+    def test_request_can_override_embedding_model_without_changing_environment(self):
+        with patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "test-key"},
+            clear=True,
+        ):
+            with patch("backend.app.services.indexing.OpenAIEmbeddings") as factory:
+                _get_embeddings("openai", "text-embedding-3-large")
+            factory.assert_called_once_with(
+                model="text-embedding-3-large",
+                api_key="test-key",
+            )
+            self.assertEqual(
+                _embedding_model_name("openai", "text-embedding-3-large"),
+                "openai:text-embedding-3-large",
+            )
+
     def test_gemini_embedding_requires_google_api_key(self):
         with patch.dict(
             os.environ,
@@ -96,6 +113,7 @@ class SeedDataTests(unittest.TestCase):
                 model="openai/text-embedding-3-large",
                 api_key="test-key",
                 base_url="https://openrouter.ai/api/v1",
+                tiktoken_model_name="text-embedding-3-small",
             )
 
     def test_empty_documents_are_not_indexed(self):

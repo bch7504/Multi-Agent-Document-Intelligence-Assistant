@@ -81,7 +81,10 @@ def _required_api_key(name: str, provider: str) -> str:
     return value
 
 
-def _embedding_model_name(embedding_provider: str | None = None) -> str:
+def _embedding_model_name(
+    embedding_provider: str | None = None,
+    embedding_model: str | None = None,
+) -> str:
     provider = _embedding_provider(embedding_provider)
     model_settings = {
         "openrouter": (
@@ -93,14 +96,21 @@ def _embedding_model_name(embedding_provider: str | None = None) -> str:
         "ollama": ("OLLAMA_EMBEDDING_MODEL", DEFAULT_OLLAMA_EMBEDDING_MODEL),
     }
     variable, default = model_settings[provider]
-    return f"{provider}:{_configured_value(variable, default)}"
+    model = embedding_model.strip() if embedding_model else _configured_value(variable, default)
+    if not model:
+        raise ValueError("Embedding model must not be blank")
+    return f"{provider}:{model}"
 
 
-def _get_embeddings(embedding_provider: str | None = None):
+def _get_embeddings(
+    embedding_provider: str | None = None,
+    embedding_model: str | None = None,
+):
     provider = _embedding_provider(embedding_provider)
+    selected_model = embedding_model.strip() if embedding_model else None
     if provider == "ollama":
         kwargs = {
-            "model": _configured_value(
+            "model": selected_model or _configured_value(
                 "OLLAMA_EMBEDDING_MODEL",
                 DEFAULT_OLLAMA_EMBEDDING_MODEL,
             )
@@ -111,7 +121,7 @@ def _get_embeddings(embedding_provider: str | None = None):
 
     if provider == "openai":
         return OpenAIEmbeddings(
-            model=_configured_value(
+            model=selected_model or _configured_value(
                 "OPENAI_EMBEDDING_MODEL",
                 DEFAULT_OPENAI_EMBEDDING_MODEL,
             ),
@@ -120,17 +130,18 @@ def _get_embeddings(embedding_provider: str | None = None):
 
     if provider == "openrouter":
         return OpenAIEmbeddings(
-            model=_configured_value(
+            model=selected_model or _configured_value(
                 "OPENROUTER_EMBEDDING_MODEL",
                 DEFAULT_OPENROUTER_EMBEDDING_MODEL,
             ),
             api_key=_required_api_key("OPENROUTER_API_KEY", "openrouter"),
             base_url=OPENROUTER_BASE_URL,
+            tiktoken_model_name="text-embedding-3-small",
         )
 
     if provider == "gemini":
         return GoogleGenerativeAIEmbeddings(
-            model=_configured_value(
+            model=selected_model or _configured_value(
                 "GEMINI_EMBEDDING_MODEL",
                 DEFAULT_GEMINI_EMBEDDING_MODEL,
             ),
@@ -140,9 +151,12 @@ def _get_embeddings(embedding_provider: str | None = None):
     raise AssertionError(f"Unhandled embedding provider: {provider}")
 
 
-def _hybrid_vectorstore_kwargs(embedding_provider: str | None) -> dict:
+def _hybrid_vectorstore_kwargs(
+    embedding_provider: str | None,
+    embedding_model: str | None = None,
+) -> dict:
     return {
-        "embedding_function": _get_embeddings(embedding_provider),
+        "embedding_function": _get_embeddings(embedding_provider, embedding_model),
         "builtin_function": BM25BuiltInFunction(
             input_field_names="text",
             output_field_names=SPARSE_VECTOR_FIELD,
@@ -175,10 +189,13 @@ def _ensure_orm_connection(vectorstore: Milvus) -> None:
         connections.connect(alias=alias, uri=uri)
 
 
-def _collection_description(embedding_provider: str | None) -> str:
+def _collection_description(
+    embedding_provider: str | None,
+    embedding_model: str | None = None,
+) -> str:
     return (
         f"RAG documents; {EMBEDDING_DESCRIPTION_PREFIX}"
-        f"{_embedding_model_name(embedding_provider)}; "
+        f"{_embedding_model_name(embedding_provider, embedding_model)}; "
         f"{RETRIEVAL_PROFILE_PREFIX}{HYBRID_RETRIEVAL_PROFILE}"
     )
 
@@ -291,6 +308,7 @@ def append_documents(
     collection_name: str,
     documents: list[Document],
     embedding_provider: str | None = None,
+    embedding_model: str | None = None,
 ) -> int:
     """Append one document's chunks without replacing other indexed documents."""
     collection_name = _validate_collection_name(collection_name)
@@ -313,14 +331,17 @@ def append_documents(
             uri,
             collection_name,
             embedding_provider=embedding_provider,
+            embedding_model=embedding_model,
         )
     else:
         _ensure_orm_connection_for_uri(uri)
         vectorstore = Milvus(
-            **_hybrid_vectorstore_kwargs(embedding_provider),
+            **_hybrid_vectorstore_kwargs(embedding_provider, embedding_model),
             connection_args={"uri": uri},
             collection_name=collection_name,
-            collection_description=_collection_description(embedding_provider),
+            collection_description=_collection_description(
+                embedding_provider, embedding_model
+            ),
             drop_old=False,
         )
         _ensure_orm_connection(vectorstore)
@@ -482,6 +503,7 @@ def connect_to_milvus(
     URL_link: str,
     collection_name: str,
     embedding_provider: str | None = None,
+    embedding_model: str | None = None,
 ) -> Milvus:
     collection_name = _validate_collection_name(collection_name)
     client = MilvusClient(uri=URL_link)
@@ -492,7 +514,7 @@ def connect_to_milvus(
     finally:
         client.close()
 
-    expected_embedding = _embedding_model_name(embedding_provider)
+    expected_embedding = _embedding_model_name(embedding_provider, embedding_model)
     actual_embedding = _embedding_from_description(description)
     if actual_embedding and actual_embedding != expected_embedding:
         raise ValueError(
@@ -508,7 +530,7 @@ def connect_to_milvus(
 
     _ensure_orm_connection_for_uri(URL_link)
     vectorstore = Milvus(
-        **_hybrid_vectorstore_kwargs(embedding_provider),
+        **_hybrid_vectorstore_kwargs(embedding_provider, embedding_model),
         connection_args={"uri": URL_link},
         collection_name=collection_name,
     )

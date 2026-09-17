@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0",
+  "created_at": "2026-09-17T06:25:05.098813+00:00",
+  "ragas_version": "0.4.3",
+  "dataset": "/code/backend/app/evaluation/datasets/stack_ai_ragas_v1.json",
+  "dataset_sha256": "b39f5244b0f30e1ce12bedc833bd7582a6558c04362501050ef6bcb09d54f2dc",
+  "collection": "data_test",
+  "case_count": 3,
+  "configuration": {
+    "llm_provider": "openrouter",
+    "embedding_provider": "openrouter",
+    "metrics": [
+      "faithfulness",
+      "answer_relevancy",
+      "factual_correctness",
+      "llm_context_precision_without_reference"
+    ]
+  },
+  "aggregate": {
+    "faithfulness": 0.9693,
+    "answer_relevancy": 0.9158,
+    "factual_correctness": 0.4867,
+    "llm_context_precision_without_reference": 0.7455
+  },
+  "cases": [
+    {
+      "id": "platform-purpose",
+      "run_id": "e55e5e50-d9b9-4e7e-b11d-f88921b96dd0",
+      "user_input": "What is the main purpose of Stack AI?",
+      "response": "Stack AI’s main purpose is to provide an enterprise platform for building, deploying, and governing AI agents that automate business processes. It enables teams to create AI workflows, connect them to business systems and knowledge bases, and deploy them through interfaces such as chatbots, APIs, and internal applications.",
+      "reference": "Stack AI is an enterprise platform for building, deploying, and governing AI agents that automate business processes. Teams can visually create workflows, connect knowledge bases, tools, integrations, and business systems, then deploy agents through chat, forms, APIs, or internal applications with enterprise controls and observability.",
+      "retrieved_context_count": 6,
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.8807767964,
+        "factual_correctness": 0.75,
+        "llm_context_precision_without_reference": 0.5555555555
+      }
+    },
+    {
+      "id": "visual-workflows",
+      "run_id": "5f826e47-f971-4104-9be2-de695569fa4a",
+      "user_input": "How can users build AI workflows in Stack AI?",
+      "response": "Users can build AI workflows in StackAI by:\n\n- Starting from scratch in the Workflow Builder or using a template organized by creator, use case, or integration.\n- Building the agent’s logic with a drag-and-drop workflow, passing data between nodes through inputs and outputs.\n- Adding a Knowledge Base node to create RAG workflows for document indexing and retrieval.\n- Connecting LLMs, voice and image models, enterprise systems, local models, and MCP servers.\n- Giving LLMs autonomous capabilities by selecting built-in tools or adding custom tools for function calling.\n- Using the built-in workflow assistant for questions, suggestions, and documentation.\n- Deploying the completed workflow as interfaces such as a Chat Assistant or Form, then monitoring and debugging it with run traces.\n- Saving completed workflows as templates for reuse or sharing with the StackAI community.",
+      "reference": "Users can start from scratch or from a template, then use the drag-and-drop workflow builder to connect nodes into an agent workflow. They can add AI models, knowledge bases for RAG, external integrations, MCP servers, and function-calling tools. The built-in assistant can help with the workflow, which can then be published to interfaces such as chat or forms and monitored with run traces.",
+      "retrieved_context_count": 6,
+      "scores": {
+        "faithfulness": 0.9411764706,
+        "answer_relevancy": 0.9143832682,
+        "factual_correctness": 0.42,
+        "llm_context_precision_without_reference": 0.8766666666
+      }
+    },
+    {
+      "id": "deployment-governance",
+      "run_id": "e97c2088-cbb4-4db8-9b43-a353f8044f9e",
+      "user_input": "Which enterprise lifecycle capabilities does Stack AI provide for AI agents?",
+      "response": "Stack AI provides end-to-end enterprise lifecycle capabilities for AI agents, including:\n\n- **Build and develop:** Visual drag-and-drop workflow design, orchestration, knowledge bases/RAG, tools/function calling, and integrations with enterprise systems.\n- **Deploy:** Deployment to chat, forms, APIs, and internal teams, with pre-built interfaces and support for cloud or on-premises deployment.\n- **Operate and monitor:** Workflow and agent monitoring, analytics, observability, and notifications.\n- **Govern and secure:** RBAC, workspace/project/feature permissions, authentication and MFA, SCIM, connection and knowledge-base permissions, and compliance controls.\n- **Manage the development lifecycle:** Controls for moving agents through development, review, and production stages—the Agentic Development Lifecycle (ADLC).",
+      "reference": "Stack AI covers the enterprise agent lifecycle: building workflows with visual tools, models, knowledge bases, integrations, and RAG; deploying agents to chat, forms, APIs, and internal applications; moving work through development, review, and production; monitoring runs with analytics and notifications; and governing access with RBAC, permissions, authentication, MFA, SSO, compliance controls, on-premises options, and local-model support.",
+      "retrieved_context_count": 6,
+      "scores": {
+        "faithfulness": 0.9666666667,
+        "answer_relevancy": 0.9523313029,
+        "factual_correctness": 0.29,
+        "llm_context_precision_without_reference": 0.8041666666
+      }
+    }
+  ]
+}

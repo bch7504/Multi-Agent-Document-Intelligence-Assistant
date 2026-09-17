@@ -30,9 +30,9 @@ class UnsupportedDocumentError(ValueError):
 
 
 PdfParser = Callable[[str | Path, UUID, str], tuple[list[Document], int]]
-DocumentIndexer = Callable[[list[Document]], int]
+DocumentIndexer = Callable[..., int]
 ChunkDeleter = Callable[[UUID], int]
-EmbeddingNameResolver = Callable[[], str]
+EmbeddingNameResolver = Callable[..., str]
 
 
 class DocumentService:
@@ -61,7 +61,16 @@ class DocumentService:
             raise UnsupportedDocumentError("Only application/pdf uploads are supported")
         return filename[:255]
 
-    async def create_from_upload(self, upload: UploadFile) -> DocumentRecord:
+    async def create_from_upload(
+        self,
+        upload: UploadFile,
+        embedding_provider: str | None = None,
+        embedding_model: str | None = None,
+    ) -> DocumentRecord:
+        if (embedding_provider is None) != (embedding_model is None):
+            raise ValueError(
+                "embedding_provider and embedding_model must be supplied together"
+            )
         filename = self._validate_upload(upload)
         document_id = uuid4()
         stored = await self.storage.save_pdf(document_id, upload)
@@ -84,9 +93,20 @@ class DocumentService:
             self.session.rollback()
             self.storage.delete(stored.key)
             raise
-        return self._process(record, stored.path)
+        return self._process(
+            record,
+            stored.path,
+            embedding_provider=embedding_provider,
+            embedding_model=embedding_model,
+        )
 
-    def _process(self, record: DocumentRecord, path: Path) -> DocumentRecord:
+    def _process(
+        self,
+        record: DocumentRecord,
+        path: Path,
+        embedding_provider: str | None = None,
+        embedding_model: str | None = None,
+    ) -> DocumentRecord:
         record.status = DocumentStatus.PROCESSING.value
         record.error_message = None
         record.updated_at = utc_now()
@@ -100,8 +120,16 @@ class DocumentService:
             return self._mark_failed(record, "PDF could not be parsed")
 
         try:
-            embedding_model = self.embedding_name()
-            chunk_count = self.indexer(chunks)
+            if embedding_provider is None:
+                selected_embedding = self.embedding_name()
+                chunk_count = self.indexer(chunks)
+            else:
+                selected_embedding = self.embedding_name(
+                    embedding_provider, embedding_model
+                )
+                chunk_count = self.indexer(
+                    chunks, embedding_provider, embedding_model
+                )
         except Exception:
             try:
                 self.chunk_deleter(record.id)
@@ -112,7 +140,7 @@ class DocumentService:
         record.status = DocumentStatus.READY.value
         record.page_count = page_count
         record.chunk_count = chunk_count
-        record.embedding_model = embedding_model[:255]
+        record.embedding_model = selected_embedding[:255]
         record.error_message = None
         record.updated_at = utc_now()
         self.session.commit()
@@ -162,15 +190,20 @@ def build_document_service(session: Session, settings: Settings | None = None) -
             settings.max_upload_bytes,
         ),
         parser=parse_and_chunk_pdf,
-        indexer=lambda chunks: append_documents(
+        indexer=lambda chunks, embedding_provider=None, embedding_model=None: append_documents(
             settings.milvus_uri,
             settings.document_collection_name,
             chunks,
+            embedding_provider=embedding_provider,
+            embedding_model=embedding_model,
         ),
         chunk_deleter=lambda document_id: delete_document_chunks(
             settings.milvus_uri,
             settings.document_collection_name,
             str(document_id),
         ),
-        embedding_name=lambda: _embedding_model_name(),
+        embedding_name=lambda embedding_provider=None, embedding_model=None: _embedding_model_name(
+            embedding_provider,
+            embedding_model,
+        ),
     )

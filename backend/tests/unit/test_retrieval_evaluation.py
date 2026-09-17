@@ -33,8 +33,11 @@ class RetrievalEvaluationTests(unittest.TestCase):
             / "datasets"
             / "stack_ai_retrieval_v2.json"
         )
+        corpus_path = repository_root / "data" / "stack_ai.json"
+        if not corpus_path.exists():
+            self.skipTest("Optional local Stack AI corpus is not available")
         documents = json.loads(
-            (repository_root / "data" / "stack_ai.json").read_text(encoding="utf-8")
+            corpus_path.read_text(encoding="utf-8")
         )
         corpus = "\n".join(document["page_content"] for document in documents).casefold()
 

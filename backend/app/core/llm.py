@@ -33,6 +33,8 @@ def _required_env(name: str, provider: str) -> str:
 def create_llm(
     llm_choice: str | None = None,
     openrouter_model: str | None = None,
+    streaming: bool = True,
+    model_name: str | None = None,
 ) -> Any:
     """Build one provider without requiring credentials for the others."""
     selected_provider = llm_choice or os.getenv("LLM_PROVIDER")
@@ -46,17 +48,17 @@ def create_llm(
 
     if provider == "gemini":
         return ChatGoogleGenerativeAI(
-            model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+            model=model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
             temperature=0,
-            streaming=True,
+            streaming=streaming,
             google_api_key=_required_env("GOOGLE_API_KEY", "Gemini"),
         )
 
     if provider == "ollama":
         kwargs: dict[str, Any] = {
-            "model": os.getenv("OLLAMA_CHAT_MODEL", DEFAULT_OLLAMA_CHAT_MODEL),
+            "model": model_name or os.getenv("OLLAMA_CHAT_MODEL", DEFAULT_OLLAMA_CHAT_MODEL),
             "temperature": 0,
-            "streaming": True,
+            "streaming": streaming,
         }
         if base_url := os.getenv("OLLAMA_BASE_URL"):
             kwargs["base_url"] = base_url
@@ -66,10 +68,11 @@ def create_llm(
 
     if provider == "openai":
         return ChatOpenAI(
-            model=os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL),
+            model=model_name or os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL),
             api_key=_required_env("OPENAI_API_KEY", "OpenAI"),
             temperature=0,
-            streaming=True,
+            streaming=streaming,
+            stream_usage=streaming,
         )
 
     headers: dict[str, str] = {}
@@ -81,6 +84,7 @@ def create_llm(
     return ChatOpenAI(
         model=(
             openrouter_model
+            or model_name
             or os.getenv("OPENROUTER_MODEL")
             or DEFAULT_OPENROUTER_MODEL
         ),
@@ -88,5 +92,6 @@ def create_llm(
         base_url=OPENROUTER_BASE_URL,
         default_headers=headers or None,
         temperature=0,
-        streaming=True,
+        streaming=streaming,
+        stream_usage=streaming,
     )

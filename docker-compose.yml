@@ -1,4 +1,17 @@
 services:
+  frontend:
+    container_name: document-assistant-frontend
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_URL: /api/v1
+    ports:
+      - "3000:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
   api:
     container_name: document-assistant-api
     build:
@@ -15,6 +28,7 @@ services:
       MILVUS_URI: http://standalone:19530
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       OLLAMA_BASE_URL: ${OLLAMA_DOCKER_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_ENABLED: ${OLLAMA_ENABLED:-false}
       OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen3:8b}
       OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-qwen3-embedding:0.6b}
       OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
@@ -38,10 +52,15 @@ services:
       RETRIEVAL_PROFILE: ${RETRIEVAL_PROFILE:-hybrid_rrf}
       CONTEXT_MAX_CHUNKS: ${CONTEXT_MAX_CHUNKS:-6}
       CONTEXT_MAX_CHARACTERS: ${CONTEXT_MAX_CHARACTERS:-24000}
+      SUMMARY_MAX_CHUNKS: ${SUMMARY_MAX_CHUNKS:-12}
+      SUMMARY_MAX_CHARACTERS: ${SUMMARY_MAX_CHARACTERS:-48000}
+      SUMMARY_MAP_BATCH_CHARACTERS: ${SUMMARY_MAP_BATCH_CHARACTERS:-10000}
+      MEMORY_MAX_MESSAGES: ${MEMORY_MAX_MESSAGES:-12}
     ports:
       - "8000:8000"
     volumes:
       - ./data/uploads:/data/uploads
+      - ./data:/code/data:ro
     command:
       [
         "/bin/sh",
@@ -62,6 +81,37 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      standalone:
+        condition: service_healthy
+
+  evaluation:
+    profiles: ["evaluation"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.evaluation
+    environment:
+      MILVUS_URI: http://standalone:19530
+      DOCUMENT_COLLECTION_NAME: ${DOCUMENT_COLLECTION_NAME:-document_chunks}
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-models/gemini-embedding-001}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-5.6-luna}
+      OPENROUTER_EMBEDDING_MODEL: ${OPENROUTER_EMBEDDING_MODEL:-openai/text-embedding-3-small}
+      OPENROUTER_SITE_URL: ${OPENROUTER_SITE_URL:-http://localhost:3000}
+      OPENROUTER_APP_NAME: ${OPENROUTER_APP_NAME:-RAG LangChain Evaluation}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.6-luna}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      OLLAMA_BASE_URL: ${OLLAMA_DOCKER_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen3:8b}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-qwen3-embedding:0.6b}
+      RAGAS_DO_NOT_TRACK: ${RAGAS_DO_NOT_TRACK:-true}
+    volumes:
+      - ./docs/reports/evaluation:/code/docs/reports/evaluation
+    depends_on:
       standalone:
         condition: service_healthy
 

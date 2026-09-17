@@ -7,6 +7,8 @@ WORKDIR /code
 
 COPY backend/requirements.txt /code/backend/requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /code/backend/requirements.txt
+ENV TIKTOKEN_CACHE_DIR=/opt/tiktoken_cache
+RUN mkdir -p "$TIKTOKEN_CACHE_DIR" && python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
 
 COPY backend /code/backend
 

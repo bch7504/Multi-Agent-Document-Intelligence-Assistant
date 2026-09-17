@@ -130,6 +130,7 @@ class MilvusHybridRetriever:
 def get_retriever(
     collection_name: str = "data_test",
     embedding_provider: str | None = None,
+    embedding_model: str | None = None,
     milvus_uri: str | None = None,
     profile: RetrievalProfile | str | None = None,
 ) -> MilvusHybridRetriever:
@@ -138,6 +139,7 @@ def get_retriever(
         milvus_uri or os.getenv("MILVUS_URI", DEFAULT_MILVUS_URI),
         collection_name,
         embedding_provider=embedding_provider,
+        embedding_model=embedding_model,
     )
     return MilvusHybridRetriever(
         vectorstore=vectorstore,
