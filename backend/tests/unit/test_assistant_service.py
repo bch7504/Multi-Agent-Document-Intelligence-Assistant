@@ -2,7 +2,7 @@ import unittest
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -11,9 +11,14 @@ from backend.app.models.document import DocumentRecord
 from backend.app.models.assistant_run import AssistantRunRecord
 from backend.app.models.conversation import ConversationRecord
 from backend.app.models.message import MessageRecord
+from backend.app.models.quiz import QuizRecord
 from backend.app.schemas.assistant import (
     AssistantRunRequest,
     AssistantRunResponse,
+    Citation,
+    QuizOption,
+    QuizQuestion,
+    QuizResult,
     ResolvedAssistantTask,
     ReviewResult,
     ReviewStatus,
@@ -44,6 +49,42 @@ class FakeRuntime:
         )
 
 
+class FakeQuizRuntime(FakeRuntime):
+    def invoke(self, request, history=None):
+        self.request = request
+        self.histories.append(history or [])
+        return AssistantRunResponse(
+            run_id=uuid4(),
+            task=ResolvedAssistantTask.QUIZ,
+            answer="Generated one grounded quiz question.",
+            citations=[],
+            quiz=QuizResult(
+                questions=[
+                    QuizQuestion(
+                        id="q1",
+                        question="What is RAG?",
+                        options=[
+                            QuizOption(id="a", text="Retrieval augmented generation"),
+                            QuizOption(id="b", text="A database"),
+                        ],
+                        correct_option_id="a",
+                        explanation="RAG combines retrieval and generation.",
+                        citations=[
+                            Citation(
+                                document_id=request.document_ids[0],
+                                document_name="guide.pdf",
+                                page_number=1,
+                                chunk_id=uuid4(),
+                                excerpt="RAG combines retrieval and generation.",
+                            )
+                        ],
+                    )
+                ]
+            ),
+            review=ReviewResult(status=ReviewStatus.PASS, retry_count=0),
+        )
+
+
 class AssistantServiceTests(unittest.TestCase):
     def setUp(self):
         self.engine = create_engine(
@@ -51,6 +92,13 @@ class AssistantServiceTests(unittest.TestCase):
             connect_args={"check_same_thread": False},
             poolclass=StaticPool,
         )
+
+        @event.listens_for(self.engine, "connect")
+        def enable_sqlite_foreign_keys(dbapi_connection, _connection_record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+
         Base.metadata.create_all(self.engine)
         self.session = Session(self.engine, expire_on_commit=False)
         self.runtime = FakeRuntime()
@@ -130,6 +178,24 @@ class AssistantServiceTests(unittest.TestCase):
                 {"role": "assistant", "content": "Grounded answer"},
             ],
         )
+
+    def test_quiz_run_is_added_to_library(self):
+        document_id = self.add_document(DocumentStatus.READY.value)
+        runtime = FakeQuizRuntime()
+        service = AssistantService(self.session, runtime)
+        request = AssistantRunRequest(
+            conversation_id=uuid4(),
+            document_ids=[document_id],
+            task="quiz",
+            message="Create a RAG quiz",
+        )
+
+        response = service.run(request)
+
+        quiz = self.session.get(QuizRecord, response.run_id)
+        self.assertIsNotNone(quiz)
+        self.assertEqual(quiz.title, "Create a RAG quiz")
+        self.assertEqual(quiz.questions[0]["correctOptionId"], "a")
 
     def test_missing_document_is_rejected(self):
         with self.assertRaises(AssistantDocumentNotFoundError):

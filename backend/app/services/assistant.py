@@ -16,6 +16,7 @@ from backend.app.models.assistant_run import AssistantRunRecord
 from backend.app.models.conversation import ConversationRecord
 from backend.app.models.document import DocumentRecord, utc_now
 from backend.app.models.message import MessageRecord
+from backend.app.models.quiz import QuizRecord
 from backend.app.rag.hybrid_search import get_retriever
 from backend.app.schemas.assistant import (
     AssistantRunAudit,
@@ -152,21 +153,27 @@ class AssistantService:
         request: AssistantRunRequest,
         response: AssistantRunResponse,
     ) -> None:
-        conversation = self.session.get(ConversationRecord, request.conversation_id)
-        now = utc_now()
-        if conversation is None:
-            conversation = ConversationRecord(
-                id=request.conversation_id,
-                title=request.message[:255],
-                created_at=now,
-                updated_at=now,
+        try:
+            conversation = self.session.get(
+                ConversationRecord, request.conversation_id
             )
-            self.session.add(conversation)
-        else:
-            conversation.updated_at = now
+            now = utc_now()
+            if conversation is None:
+                conversation = ConversationRecord(
+                    id=request.conversation_id,
+                    title=request.message[:255],
+                    created_at=now,
+                    updated_at=now,
+                )
+                self.session.add(conversation)
+                # These models intentionally do not expose ORM relationships.
+                # Flush the parent explicitly so PostgreSQL can satisfy the
+                # foreign keys of messages, runs, and quizzes below.
+                self.session.flush()
+            else:
+                conversation.updated_at = now
 
-        self.session.add_all(
-            [
+            records = [
                 MessageRecord(
                     conversation_id=request.conversation_id,
                     role="user",
@@ -204,8 +211,25 @@ class AssistantService:
                     usage=response.usage.model_dump(mode="json", by_alias=True),
                 ),
             ]
-        )
-        try:
+            self.session.add_all(records)
+            # A saved quiz references both the conversation and assistant run.
+            # Persist those parents before inserting the quiz record.
+            self.session.flush()
+            if response.quiz is not None:
+                self.session.add(
+                    QuizRecord(
+                        id=response.run_id,
+                        run_id=response.run_id,
+                        conversation_id=request.conversation_id,
+                        title=request.message[:255],
+                        questions=[
+                            question.model_dump(mode="json", by_alias=True)
+                            for question in response.quiz.questions
+                        ],
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
             self.session.commit()
         except Exception:
             self.session.rollback()
