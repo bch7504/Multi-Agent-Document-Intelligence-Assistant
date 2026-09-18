@@ -33,3 +33,19 @@ class ModelCatalog(ApiModel):
     active_embedding: ModelChoice
     providers: list[ProviderCatalog]
     embedding_change_requires_reindex: bool = True
+
+
+class ModelValidationRequest(ApiModel):
+    chat: ModelChoice
+    embedding: ModelChoice
+
+
+class ModelCheckResult(ApiModel):
+    usable: bool
+    message: str
+
+
+class ModelValidationResponse(ApiModel):
+    usable: bool
+    chat: ModelCheckResult
+    embedding: ModelCheckResult

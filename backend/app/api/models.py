@@ -8,22 +8,61 @@ from backend.app.core.llm import (
     DEFAULT_OLLAMA_CHAT_MODEL,
     DEFAULT_OPENAI_MODEL,
     DEFAULT_OPENROUTER_MODEL,
+    create_llm,
 )
 from backend.app.services.indexing import (
     DEFAULT_GEMINI_EMBEDDING_MODEL,
     DEFAULT_OLLAMA_EMBEDDING_MODEL,
     DEFAULT_OPENAI_EMBEDDING_MODEL,
     DEFAULT_OPENROUTER_EMBEDDING_MODEL,
+    _get_embeddings,
 )
 from backend.app.schemas.models import (
     ModelCatalog,
     ModelChoice,
+    ModelCheckResult,
     ModelProvider,
+    ModelValidationRequest,
+    ModelValidationResponse,
     ProviderCatalog,
 )
 
 
 router = APIRouter(prefix="/models", tags=["models"])
+
+
+def _failure_message(error: Exception) -> str:
+    if isinstance(error, ValueError):
+        return str(error)
+    return f"{type(error).__name__}: provider rejected the model or could not be reached"
+
+
+def _validate_chat(choice: ModelChoice) -> ModelCheckResult:
+    try:
+        model = create_llm(
+            llm_choice=choice.provider.value,
+            model_name=choice.model,
+            streaming=False,
+        )
+        model.invoke("Reply with OK only. This is a model availability check.")
+    except Exception as error:  # Provider SDKs expose different exception types.
+        return ModelCheckResult(usable=False, message=_failure_message(error))
+    return ModelCheckResult(usable=True, message="Chat model responded successfully")
+
+
+def _validate_embedding(choice: ModelChoice) -> ModelCheckResult:
+    try:
+        vector = _get_embeddings(choice.provider.value, choice.model).embed_query(
+            "model availability check"
+        )
+        if not vector:
+            raise ValueError("Embedding provider returned an empty vector")
+    except Exception as error:  # Provider SDKs expose different exception types.
+        return ModelCheckResult(usable=False, message=_failure_message(error))
+    return ModelCheckResult(
+        usable=True,
+        message=f"Embedding model responded with {len(vector)} dimensions",
+    )
 
 
 def _value(name: str, default: str) -> str:
@@ -117,4 +156,17 @@ def get_model_catalog() -> ModelCatalog:
             model=embedding_models[embedding_provider],
         ),
         providers=providers,
+    )
+
+
+@router.post("/validate", response_model=ModelValidationResponse)
+def validate_model_selection(request: ModelValidationRequest) -> ModelValidationResponse:
+    """Verify selected model IDs without returning credentials to the browser."""
+
+    chat = _validate_chat(request.chat)
+    embedding = _validate_embedding(request.embedding)
+    return ModelValidationResponse(
+        usable=chat.usable and embedding.usable,
+        chat=chat,
+        embedding=embedding,
     )

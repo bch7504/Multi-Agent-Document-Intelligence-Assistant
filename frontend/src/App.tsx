@@ -2,8 +2,32 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatWorkspace } from "./components/chat/ChatWorkspace";
 import { ModelSettings } from "./components/common/ModelSettings";
 import { DocumentPanel } from "./components/documents/DocumentPanel";
-import { deleteDocument, getModelCatalog, listDocuments, runAssistant, uploadDocument } from "./services/api";
-import type { AssistantTask, ChatEntry, DocumentItem, ModelCatalog, ModelProvider, ModelSelection } from "./types/api";
+import { HistoryPanel } from "./components/history/HistoryPanel";
+import { QuizLibrary } from "./components/quiz/QuizLibrary";
+import {
+  deleteConversation,
+  deleteDocument,
+  getConversationMessages,
+  getModelCatalog,
+  listConversations,
+  listDocuments,
+  listQuizzes,
+  MAX_UPLOAD_BYTES,
+  MAX_UPLOAD_MEGABYTES,
+  renameConversation,
+  runAssistant,
+  uploadDocument,
+} from "./services/api";
+import type {
+  AssistantTask,
+  ChatEntry,
+  ConversationSummary,
+  DocumentItem,
+  ModelCatalog,
+  ModelProvider,
+  ModelSelection,
+  QuizLibraryItem,
+} from "./types/api";
 
 function getConversationId(): string {
   const existing = sessionStorage.getItem("atlas-conversation-id");
@@ -30,16 +54,23 @@ export function App() {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [entries, setEntries] = useState<ChatEntry[]>([]);
-  const [task, setTask] = useState<AssistantTask>("qa");
+  const [task, setTask] = useState<AssistantTask>("auto");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
   const [models, setModels] = useState<ModelSelection | null>(null);
   const [modelsOpen, setModelsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [quizLibraryOpen, setQuizLibraryOpen] = useState(false);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [quizzes, setQuizzes] = useState<QuizLibraryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [quizLoading, setQuizLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const runEpoch = useRef(0);
+  const initialConversationId = useRef(conversationId);
 
   const refresh = useCallback(async () => {
     try {
@@ -51,8 +82,57 @@ export function App() {
     }
   }, []);
 
+  const refreshConversations = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const response = await listConversations();
+      setConversations(response.items);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  const refreshQuizzes = useCallback(async () => {
+    setQuizLoading(true);
+    try {
+      const response = await listQuizzes();
+      setQuizzes(response.items);
+    } finally {
+      setQuizLoading(false);
+    }
+  }, []);
+
+  const loadConversation = useCallback(async (id: string, closePanel = true) => {
+    runEpoch.current += 1;
+    const response = await getConversationMessages(id);
+    if (!response) return;
+    sessionStorage.setItem("atlas-conversation-id", id);
+    setConversationId(id);
+    setEntries(response.items.map((item) => ({
+      id: item.id,
+      role: item.role,
+      text: item.content,
+      task: item.task ?? undefined,
+    })));
+    setBusy(false);
+    setError(null);
+    if (closePanel) setHistoryOpen(false);
+  }, []);
+
   useEffect(() => {
     void refresh();
+    // A freshly generated thread id does not exist in PostgreSQL until its
+    // first successful assistant run. Check history before requesting messages
+    // so a legitimate new thread does not generate a noisy 404 in the browser.
+    void listConversations()
+      .then((response) => {
+        setConversations(response.items);
+        if (response.items.some((item) => item.id === initialConversationId.current)) {
+          return loadConversation(initialConversationId.current, false);
+        }
+        return undefined;
+      })
+      .catch((cause) => setError(cause instanceof Error ? cause.message : "Could not load conversation history"));
     void getModelCatalog()
       .then((response) => {
         setCatalog(response);
@@ -62,7 +142,7 @@ export function App() {
           });
       })
       .catch((cause) => setError(cause instanceof Error ? cause.message : "Could not load model catalog"));
-  }, [refresh]);
+  }, [loadConversation, refresh]);
 
   useEffect(() => {
     const indexed = documents.find(
@@ -86,12 +166,28 @@ export function App() {
   }, [notice]);
 
   async function handleUpload(file: File) {
-    setUploading(true); setError(null);
+    setError(null);
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      setError("Only PDF documents can be uploaded");
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      const size = (file.size / (1024 * 1024)).toFixed(1);
+      setError(`This PDF is ${size} MB. The upload limit is ${MAX_UPLOAD_MEGABYTES} MB`);
+      return;
+    }
+    setUploading(true);
     try {
       if (!models) throw new Error("Model configuration is still loading");
       const document = await uploadDocument(file, models);
       await refresh();
-      if (document.status === "ready") setSelectedIds((ids) => [...new Set([...ids, document.id])]);
+      if (document.status === "failed") {
+        throw new Error(document.errorMessage || "The PDF could not be processed");
+      }
+      if (document.status === "ready") {
+        setSelectedIds((ids) => [...new Set([...ids, document.id])]);
+        setNotice(`${document.name} uploaded and indexed`);
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Upload failed");
     } finally { setUploading(false); }
@@ -112,12 +208,36 @@ export function App() {
     try {
       const result = await runAssistant({ conversationId, documentIds: selectedIds, task, message: input, models });
       if (runEpoch.current === epoch) {
-        setEntries((items) => [...items, { id: result.runId, role: "assistant", text: result.answer, task, result }]);
+        setEntries((items) => [...items, { id: result.runId, role: "assistant", text: result.answer, task: result.task, result }]);
+        void refreshConversations().catch(() => undefined);
+        if (result.quiz) void refreshQuizzes().catch(() => undefined);
       }
     } catch (cause) {
       if (runEpoch.current === epoch) setError(cause instanceof Error ? cause.message : "Assistant run failed");
     } finally {
       if (runEpoch.current === epoch) setBusy(false);
+    }
+  }
+
+  async function handleRenameConversation(id: string, title: string) {
+    try {
+      await renameConversation(id, title);
+      await refreshConversations();
+      setNotice("Thread renamed");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not rename thread");
+    }
+  }
+
+  async function handleDeleteConversation(id: string) {
+    if (!window.confirm("Delete this thread, its runs, and saved quizzes?")) return;
+    try {
+      await deleteConversation(id);
+      await Promise.all([refreshConversations(), refreshQuizzes()]);
+      if (id === conversationId) resetThread();
+      setNotice("Thread deleted");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not delete thread");
     }
   }
 
@@ -128,7 +248,7 @@ export function App() {
     setConversationId(nextConversationId);
     setEntries([]);
     setMessage("");
-    setTask("qa");
+    setTask("auto");
     setBusy(false);
     setError(null);
     setNotice("New thread started");
@@ -156,6 +276,14 @@ export function App() {
         onSubmit={() => void handleRun()}
         onReset={resetThread}
         onOpenModels={() => setModelsOpen(true)}
+        onOpenHistory={() => {
+          setHistoryOpen(true);
+          void refreshConversations().catch((cause) => setError(cause instanceof Error ? cause.message : "Could not load history"));
+        }}
+        onOpenQuizzes={() => {
+          setQuizLibraryOpen(true);
+          void refreshQuizzes().catch((cause) => setError(cause instanceof Error ? cause.message : "Could not load quizzes"));
+        }}
       />
       {catalog && models && (
         <ModelSettings
@@ -170,6 +298,25 @@ export function App() {
           onClose={() => setModelsOpen(false)}
         />
       )}
+      <HistoryPanel
+        open={historyOpen}
+        loading={historyLoading}
+        conversations={conversations}
+        currentId={conversationId}
+        onSelect={(id) => void loadConversation(id).catch((cause) => setError(cause instanceof Error ? cause.message : "Could not load thread"))}
+        onRename={(id, title) => void handleRenameConversation(id, title)}
+        onDelete={(id) => void handleDeleteConversation(id)}
+        onClose={() => setHistoryOpen(false)}
+      />
+      <QuizLibrary
+        open={quizLibraryOpen}
+        loading={quizLoading}
+        quizzes={quizzes}
+        onRefresh={refreshQuizzes}
+        onClose={() => setQuizLibraryOpen(false)}
+        onError={setError}
+        onNotice={setNotice}
+      />
       {error && <div className="error-toast"><strong>Request failed</strong><span>{error}</span><button type="button" onClick={() => setError(null)}>×</button></div>}
       {notice && <div className="success-toast" role="status"><span className="success-check">✓</span><span>{notice}</span></div>}
     </div>

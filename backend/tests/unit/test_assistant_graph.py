@@ -1,4 +1,6 @@
 import unittest
+import os
+from unittest.mock import patch
 from uuid import uuid4
 
 from langchain_core.documents import Document
@@ -6,15 +8,21 @@ from langchain_core.documents import Document
 from backend.app.graph.graph import create_assistant_runtime
 from backend.app.graph.state import MAX_CHECKPOINT_MESSAGES, merge_history
 from backend.app.schemas.assistant import AssistantRunRequest
+from backend.app.services.quiz import resolve_quiz_question_count
 
 
 class FakeRetriever:
     def __init__(self, documents):
         self.documents = documents
         self.queries = []
+        self.full_document_scopes = []
 
     def invoke_scoped(self, query, document_ids):
         self.queries.append((query, tuple(document_ids)))
+        return self.documents
+
+    def invoke_all_scoped(self, document_ids):
+        self.full_document_scopes.append(tuple(document_ids))
         return self.documents
 
 
@@ -29,10 +37,17 @@ class FakeStructuredModel:
 
 
 class FakeLlm:
-    def __init__(self, chunk_id, auto_task="summary", review_decisions=None):
+    def __init__(
+        self,
+        chunk_id,
+        auto_task="summary",
+        review_decisions=None,
+        quiz_question_count=1,
+    ):
         self.chunk_id = chunk_id
         self.auto_task = auto_task
         self.review_decisions = list(review_decisions or [{"status": "pass"}])
+        self.quiz_question_count = quiz_question_count
         self.calls = []
 
     def with_structured_output(self, schema):
@@ -62,12 +77,13 @@ class FakeLlm:
             return {
                 "questions": [
                     {
-                        "question": "What does RAG do before generation?",
+                        "question": f"Question {index}: What does RAG do before generation?",
                         "options": ["Retrieves evidence", "Deletes evidence"],
                         "correct_option_index": 0,
                         "explanation": "The document says RAG retrieves evidence.",
                         "cited_chunk_ids": [str(self.chunk_id)],
                     }
+                    for index in range(1, self.quiz_question_count + 1)
                 ]
             }
         if schema_name == "GroundingReviewDecision":
@@ -126,7 +142,7 @@ class AssistantGraphTests(unittest.TestCase):
         self.assertEqual(response.citations[0].chunk_id, self.chunk_id)
         self.assertNotIn("TaskResolution", [name for name, _ in self.llm.calls])
 
-    def test_auto_summary_uses_resolver_and_map_reduce(self):
+    def test_auto_summary_uses_adaptive_single_pass(self):
         response = self.runtime.invoke(self.request("auto", "Summarize this document"))
 
         trace_ids = [step.id for step in response.trace]
@@ -148,8 +164,68 @@ class AssistantGraphTests(unittest.TestCase):
         schemas = [name for name, _ in self.llm.calls]
         self.assertIn("TaskResolution", schemas)
         self.assertIn("SummaryMapDraft", schemas)
-        self.assertIn("SummaryDraft", schemas)
+        self.assertNotIn("SummaryDraft", schemas)
         self.assertEqual(response.citations[0].chunk_id, self.chunk_id)
+        self.assertEqual(self.retriever.full_document_scopes, [(self.document_id,)])
+        self.assertEqual(self.retriever.queries, [])
+
+    def test_large_summary_keeps_map_reduce_path(self):
+        second_chunk_id = uuid4()
+        retriever = FakeRetriever(
+            [
+                self.retriever.documents[0],
+                Document(
+                    page_content="A second section describes access controls.",
+                    metadata={
+                        "document_id": str(self.document_id),
+                        "chunk_id": str(second_chunk_id),
+                        "source_name": "rag.pdf",
+                        "page_number": 3,
+                    },
+                ),
+            ]
+        )
+        llm = FakeLlm(self.chunk_id)
+        runtime = create_assistant_runtime(retriever, llm)
+
+        with patch.dict(
+            os.environ,
+            {
+                "SUMMARY_SINGLE_PASS_CHARACTERS": "1",
+                "SUMMARY_FULL_DOCUMENT_BATCH_CHARACTERS": "1",
+                "SUMMARY_MAP_BATCH_CHARACTERS": "1",
+            },
+        ):
+            response = runtime.invoke(self.request("summary", "Summarize this document"))
+
+        schemas = [name for name, _ in llm.calls]
+        self.assertEqual(schemas.count("SummaryMapDraft"), 2)
+        self.assertIn("SummaryDraft", schemas)
+        self.assertEqual(response.review.status, "pass")
+
+    def test_summary_review_retry_does_not_reload_full_document(self):
+        llm = FakeLlm(
+            self.chunk_id,
+            auto_task="summary",
+            review_decisions=[
+                {
+                    "status": "fail",
+                    "feedback": "Revise the final summary.",
+                    "retry_target": "retrieval",
+                },
+                {"status": "pass"},
+            ],
+        )
+        runtime = create_assistant_runtime(self.retriever, llm)
+
+        response = runtime.invoke(self.request("summary", "Summarize this document"))
+
+        self.assertEqual(response.review.status, "pass")
+        self.assertEqual(response.review.retry_count, 1)
+        self.assertEqual(len(self.retriever.full_document_scopes), 1)
+        schemas = [name for name, _ in llm.calls]
+        self.assertEqual(schemas.count("SummaryMapDraft"), 1)
+        self.assertEqual(schemas.count("SummaryDraft"), 1)
 
     def test_checkpointer_uses_conversation_history_for_follow_up(self):
         conversation_id = uuid4()
@@ -166,7 +242,7 @@ class AssistantGraphTests(unittest.TestCase):
         self.assertIn("RewrittenQuery", [name for name, _ in self.llm.calls])
 
     def test_quiz_returns_one_valid_answer_explanation_and_citation(self):
-        response = self.runtime.invoke(self.request("quiz", "Create a quiz"))
+        response = self.runtime.invoke(self.request("quiz", "Create a 1-question quiz"))
 
         self.assertEqual(response.task, "quiz")
         self.assertEqual(response.review.status, "pass")
@@ -176,8 +252,36 @@ class AssistantGraphTests(unittest.TestCase):
         self.assertTrue(question.explanation)
         self.assertEqual(question.citations[0].chunk_id, self.chunk_id)
 
+    def test_quiz_uses_question_count_requested_by_user(self):
+        llm = FakeLlm(self.chunk_id, quiz_question_count=3)
+        runtime = create_assistant_runtime(self.retriever, llm)
+
+        response = runtime.invoke(self.request("quiz", "Tạo quiz gồm 3 câu hỏi"))
+
+        self.assertEqual(response.review.status, "pass")
+        self.assertEqual(len(response.quiz.questions), 3)
+        quiz_call = next(messages for name, messages in llm.calls if name == "QuizDraft")
+        self.assertIn("Return exactly 3 questions", quiz_call[1][1])
+
+    def test_quiz_defaults_to_five_questions_when_count_is_omitted(self):
+        llm = FakeLlm(self.chunk_id, quiz_question_count=5)
+        runtime = create_assistant_runtime(self.retriever, llm)
+
+        response = runtime.invoke(self.request("quiz", "Create a quiz about RAG"))
+
+        self.assertEqual(response.review.status, "pass")
+        self.assertEqual(len(response.quiz.questions), 5)
+
+    def test_quiz_count_understands_common_vietnamese_and_english_requests(self):
+        self.assertEqual(resolve_quiz_question_count("Tạo 7 câu hỏi"), 7)
+        self.assertEqual(resolve_quiz_question_count("Create a three-question quiz"), 3)
+        self.assertEqual(resolve_quiz_question_count("Tạo năm câu về RAG"), 5)
+        self.assertEqual(resolve_quiz_question_count("Create a quiz"), 5)
+        self.assertEqual(resolve_quiz_question_count("Create 50 questions"), 20)
+
     def test_auto_task_can_route_to_quiz(self):
         self.llm.auto_task = "quiz"
+        self.llm.quiz_question_count = 5
 
         response = self.runtime.invoke(self.request("auto", "Create a quiz"))
 

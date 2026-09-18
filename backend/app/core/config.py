@@ -49,7 +49,7 @@ def get_settings() -> Settings:
             "postgresql+psycopg://document_assistant:document_assistant_dev@localhost:5432/document_assistant",
         ),
         document_storage_path=os.getenv("DOCUMENT_STORAGE_PATH", "data/uploads"),
-        max_upload_bytes=int(os.getenv("MAX_UPLOAD_BYTES", str(25 * 1024 * 1024))),
+        max_upload_bytes=int(os.getenv("MAX_UPLOAD_BYTES", str(75 * 1024 * 1024))),
         milvus_uri=os.getenv("MILVUS_URI", "http://localhost:19530"),
         document_collection_name=os.getenv(
             "DOCUMENT_COLLECTION_NAME",

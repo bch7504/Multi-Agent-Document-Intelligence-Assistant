@@ -13,6 +13,8 @@ from backend.app.services.citations import CitationValidationError
 DEFAULT_SUMMARY_CHUNKS = 12
 DEFAULT_SUMMARY_CHARACTERS = 48_000
 DEFAULT_MAP_BATCH_CHARACTERS = 10_000
+DEFAULT_FULL_DOCUMENT_BATCH_CHARACTERS = 24_000
+DEFAULT_SINGLE_PASS_CHARACTERS = 24_000
 
 
 class SummaryMapDraft(BaseModel):
@@ -62,10 +64,30 @@ def select_summary_context(chunks: Iterable[RetrievedChunk]) -> list[RetrievedCh
 
 
 def summary_batches(chunks: list[RetrievedChunk]) -> list[list[RetrievedChunk]]:
-    """Group chunks into prompt-sized batches without splitting evidence."""
+    """Group chunks adaptively without splitting evidence.
+
+    A bounded context that fits in one model request stays in a single batch.
+    Larger contexts retain the map-reduce path.
+    """
+    single_pass_budget = _positive_int_env(
+        "SUMMARY_SINGLE_PASS_CHARACTERS",
+        DEFAULT_SINGLE_PASS_CHARACTERS,
+    )
+    if sum(len(chunk.content) for chunk in chunks) <= single_pass_budget:
+        return [chunks] if chunks else []
+
+    batch_variable = (
+        "SUMMARY_FULL_DOCUMENT_BATCH_CHARACTERS"
+        if os.getenv("SUMMARY_FULL_DOCUMENT_BATCH_CHARACTERS") is not None
+        else "SUMMARY_MAP_BATCH_CHARACTERS"
+    )
     budget = _positive_int_env(
-        "SUMMARY_MAP_BATCH_CHARACTERS",
-        DEFAULT_MAP_BATCH_CHARACTERS,
+        batch_variable,
+        (
+            DEFAULT_FULL_DOCUMENT_BATCH_CHARACTERS
+            if batch_variable == "SUMMARY_FULL_DOCUMENT_BATCH_CHARACTERS"
+            else DEFAULT_MAP_BATCH_CHARACTERS
+        ),
     )
     batches: list[list[RetrievedChunk]] = []
     current: list[RetrievedChunk] = []

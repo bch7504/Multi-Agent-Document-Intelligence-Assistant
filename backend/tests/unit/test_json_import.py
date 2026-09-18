@@ -3,7 +3,10 @@ from uuid import uuid4
 
 from langchain_core.documents import Document
 
-from backend.app.ingestion.import_json import derive_document_sections
+from backend.app.ingestion.import_json import (
+    build_curated_demo_documents,
+    derive_document_sections,
+)
 
 
 class JsonImportSectionTests(unittest.TestCase):
@@ -30,6 +33,37 @@ class JsonImportSectionTests(unittest.TestCase):
         )
 
         self.assertEqual(sections[0]["title"], "Introduction")
+
+    def test_curated_demo_is_split_into_five_stable_documents(self):
+        local_data = [
+            {
+                "page_content": f"# Section {index}\nContent {index}",
+                "metadata": {"source": "https://example.test/llms-full.txt"},
+            }
+            for index in range(179)
+        ]
+
+        first = build_curated_demo_documents(local_data, "stack ai")
+        second = build_curated_demo_documents(local_data, "stack ai")
+
+        self.assertEqual(len(first), 5)
+        self.assertEqual([item["id"] for item in first], [item["id"] for item in second])
+        self.assertEqual(
+            [len(item["documents"]) for item in first],
+            [19, 11, 10, 19, 6],
+        )
+        self.assertEqual(len({item["id"] for item in first}), 5)
+        for item in first:
+            self.assertTrue(
+                all(
+                    document.metadata["document_id"] == str(item["id"])
+                    for document in item["documents"]
+                )
+            )
+            self.assertEqual(
+                [document.metadata["chunk_index"] for document in item["documents"]],
+                list(range(len(item["documents"]))),
+            )
 
 
 if __name__ == "__main__":

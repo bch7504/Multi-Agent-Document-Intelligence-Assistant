@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { MAX_UPLOAD_MEGABYTES } from "../../services/api";
 import type { DocumentItem } from "../../types/api";
 
 interface Props {
@@ -40,7 +41,7 @@ export function DocumentPanel({
       >
         <span className="upload-icon">↑</span>
         <strong>{loading ? "Indexing document…" : "Upload a PDF"}</strong>
-        <small>Text PDFs · up to 25 MB</small>
+        <small>Text PDFs · up to {MAX_UPLOAD_MEGABYTES} MB</small>
       </button>
       <input
         ref={inputRef}
@@ -83,7 +84,9 @@ export function DocumentPanel({
                     <small>
                       {ready
                         ? importedJson
-                          ? `${sections.length} documents · ${document.chunkCount ?? 0} chunks`
+                          ? sections.length > 0
+                            ? `${sections.length} documents · ${document.chunkCount ?? 0} chunks`
+                            : `${document.chunkCount ?? 0} chunks`
                           : `${document.pageCount ?? 0} pages · ${document.chunkCount ?? 0} chunks`
                         : document.status}
                     </small>

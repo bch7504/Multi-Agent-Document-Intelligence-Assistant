@@ -41,8 +41,12 @@ from backend.app.services.qa import (
     _select_context,
 )
 from backend.app.services.query_rewrite import rewrite_query
-from backend.app.services.quiz import QuizDraft, build_quiz_result
-from backend.app.services.retrieval import retrieve_chunks
+from backend.app.services.quiz import (
+    QuizDraft,
+    build_quiz_result,
+    resolve_quiz_question_count,
+)
+from backend.app.services.retrieval import retrieve_chunks, retrieve_document_chunks
 from backend.app.services.summary import (
     SummaryDraft,
     SummaryMapDraft,
@@ -211,24 +215,18 @@ class AssistantGraphNodes:
     def retrieve_summary(self, state: AssistantGraphState) -> dict:
         started = perf_counter()
         request = state["request"]
-        chunks = select_summary_context(
-            retrieve_chunks(
-                self.retriever,
-                state["retrieval_query"],
-                document_ids=request.document_ids,
-            )
-        )
+        chunks = retrieve_document_chunks(self.retriever, request.document_ids)
         if not chunks:
             raise InsufficientContextError(
-                "No retrieved evidence belongs to the selected documents"
+                "Selected documents do not contain indexed chunks"
             )
         return {
             "chunks": chunks,
             "trace": _trace(
                 state,
                 "retrieve_summary",
-                "Summary retrieval",
-                f"Selected {len(chunks)} chunks for map-reduce",
+                "Full document load",
+                f"Loaded all {len(chunks)} indexed chunks in source order",
                 started,
             ),
         }
@@ -239,30 +237,39 @@ class AssistantGraphNodes:
         config: RunnableConfig | None = None,
     ) -> dict:
         started = perf_counter()
-        drafts: list[SummaryMapDraft] = []
         structured_llm = self.llm.with_structured_output(SummaryMapDraft)
-        for batch in summary_batches(state["chunks"]):
-            raw = structured_llm.invoke(
-                [
-                    ("system", SUMMARY_MAP_SYSTEM_PROMPT),
-                    (
-                        "human",
-                        build_summary_map_prompt(
-                            state["request"].message,
-                            format_summary_evidence(batch),
-                        ),
+        batches = summary_batches(state["chunks"])
+        prompts = [
+            [
+                ("system", SUMMARY_MAP_SYSTEM_PROMPT),
+                (
+                    "human",
+                    build_summary_map_prompt(
+                        state["request"].message,
+                        format_summary_evidence(batch),
                     ),
-                ],
-                config=config,
-            )
-            drafts.append(SummaryMapDraft.model_validate(raw))
+                ),
+            ]
+            for batch in batches
+        ]
+        if len(prompts) > 1 and hasattr(structured_llm, "batch"):
+            batch_config = dict(config or {})
+            batch_config["max_concurrency"] = min(4, len(prompts))
+            raw_drafts = structured_llm.batch(prompts, config=batch_config)
+        else:
+            raw_drafts = [
+                structured_llm.invoke(messages, config=config)
+                for messages in prompts
+            ]
+        drafts = [SummaryMapDraft.model_validate(raw) for raw in raw_drafts]
+        strategy = "single-pass" if len(drafts) == 1 else "parallel map-reduce"
         return {
             "map_drafts": drafts,
             "trace": _trace(
                 state,
                 "map_summary",
                 "Map summaries",
-                f"Generated {len(drafts)} partial summaries",
+                f"Generated {len(drafts)} partial summaries via {strategy}",
                 started,
             ),
         }
@@ -273,28 +280,61 @@ class AssistantGraphNodes:
         config: RunnableConfig | None = None,
     ) -> dict:
         started = perf_counter()
+        drafts = state["map_drafts"]
+        if len(drafts) == 1 and not state.get("review_feedback"):
+            draft = drafts[0]
+            return {
+                "answer": draft.summary.strip(),
+                "cited_chunk_ids": draft.cited_chunk_ids,
+                "quiz": None,
+                "trace": _trace(
+                    state,
+                    "reduce_summary",
+                    "Adaptive reduce",
+                    "Single-pass summary reused without a second model call",
+                    started,
+                ),
+            }
+
         blocks = []
-        for index, draft in enumerate(state["map_drafts"], start=1):
+        for index, draft in enumerate(drafts, start=1):
             ids = ",".join(str(chunk_id) for chunk_id in draft.cited_chunk_ids)
             blocks.append(
                 f'<partial_summary index="{index}" chunk_ids="{ids}">\n'
                 f"{draft.summary}\n</partial_summary>"
             )
         raw = self.llm.with_structured_output(SummaryDraft).invoke(
-            [
-                ("system", SUMMARY_REDUCE_SYSTEM_PROMPT),
-                (
-                    "human",
-                    build_summary_reduce_prompt(
-                        state["request"].message,
-                        "\n\n".join(blocks),
-                        state.get("review_feedback"),
+                [
+                    ("system", SUMMARY_REDUCE_SYSTEM_PROMPT),
+                    (
+                        "human",
+                        build_summary_reduce_prompt(
+                            state["request"].message,
+                            "\n\n".join(blocks),
+                            state.get("review_feedback"),
+                        ),
                     ),
-                ),
-            ],
-            config=config,
+                ],
+                config=config,
         )
         draft = SummaryDraft.model_validate(raw)
+        allowed_chunk_ids = set(
+            chunk_id
+            for map_draft in drafts
+            for chunk_id in map_draft.cited_chunk_ids
+        )
+        # Structured-output providers can still emit a syntactically valid but
+        # unknown UUID. Canonicalize citations to the IDs proven by map drafts;
+        # output validation will reject the result if none remain.
+        draft = draft.model_copy(
+            update={
+                "cited_chunk_ids": [
+                    chunk_id
+                    for chunk_id in draft.cited_chunk_ids
+                    if chunk_id in allowed_chunk_ids
+                ]
+            }
+        )
         return {
             "answer": draft.answer.strip(),
             "cited_chunk_ids": draft.cited_chunk_ids,
@@ -311,14 +351,19 @@ class AssistantGraphNodes:
     def resolve_quiz_scope(self, state: AssistantGraphState) -> dict:
         started = perf_counter()
         message = state["request"].message
+        question_count = resolve_quiz_question_count(message)
         return {
             "resolved_task": ResolvedAssistantTask.QUIZ,
+            "quiz_question_count": question_count,
             "retrieval_query": f"quiz learning objectives key facts {message}",
             "trace": _trace(
                 state,
                 "resolve_quiz_scope",
                 "Quiz scope",
-                f"Quiz scope prepared for {len(state['request'].document_ids)} documents",
+                (
+                    f"Quiz scope prepared for {len(state['request'].document_ids)} documents "
+                    f"with {question_count} question(s)"
+                ),
                 started,
             ),
         }
@@ -362,6 +407,7 @@ class AssistantGraphNodes:
                     build_quiz_prompt(
                         state["request"].message,
                         format_summary_evidence(state["chunks"]),
+                        state["quiz_question_count"],
                         state.get("review_feedback"),
                     ),
                 ),
@@ -391,6 +437,13 @@ class AssistantGraphNodes:
         try:
             quiz = None
             if state["resolved_task"] == ResolvedAssistantTask.QUIZ:
+                actual_count = len(state["quiz_draft"].questions)
+                expected_count = state["quiz_question_count"]
+                if actual_count != expected_count:
+                    raise ValueError(
+                        f"quiz must contain exactly {expected_count} questions; "
+                        f"received {actual_count}"
+                    )
                 quiz = build_quiz_result(
                     state["quiz_draft"],
                     state["chunks"],
@@ -447,10 +500,18 @@ class AssistantGraphNodes:
         detail = decision.status.upper()
         if decision.feedback:
             detail = f"{detail} · {decision.feedback}"
+        retry_target = decision.retry_target
+        if (
+            decision.status == "fail"
+            and state["resolved_task"] == ResolvedAssistantTask.SUMMARY
+        ):
+            # Full-document retrieval already loaded every indexed chunk. A
+            # second retrieval/map pass cannot add evidence; revise reduce only.
+            retry_target = "generation"
         return {
             "review_status": decision.status,
             "review_feedback": decision.feedback,
-            "retry_target": decision.retry_target,
+            "retry_target": retry_target,
             "trace": _trace(
                 state,
                 "review_output",

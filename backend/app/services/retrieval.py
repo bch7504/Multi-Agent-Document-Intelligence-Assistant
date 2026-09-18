@@ -113,3 +113,38 @@ def retrieve_chunks(
         # Defense in depth for legacy/fake retrievers that cannot filter at source.
         chunks = [chunk for chunk in chunks if chunk.document_id in allowed]
     return chunks
+
+
+def retrieve_document_chunks(
+    retriever: Any,
+    document_ids: Iterable[UUID],
+) -> list[RetrievedChunk]:
+    """Load every indexed chunk for selected documents in source order."""
+    allowed_ids = tuple(dict.fromkeys(document_ids))
+    if not allowed_ids:
+        raise ValueError("At least one document is required")
+    if not hasattr(retriever, "invoke_all_scoped"):
+        raise RuntimeError("Retriever does not support full-document loading")
+
+    documents = retriever.invoke_all_scoped(allowed_ids)
+    allowed = set(allowed_ids)
+    chunks = [
+        chunk
+        for chunk in normalize_documents(documents)
+        if chunk.document_id in allowed
+    ]
+    document_order = {
+        document_id: index for index, document_id in enumerate(allowed_ids)
+    }
+    chunks.sort(
+        key=lambda chunk: (
+            document_order.get(chunk.document_id, len(document_order)),
+            chunk.chunk_index if chunk.chunk_index is not None else chunk.rank,
+            chunk.page_number or 0,
+            chunk.rank,
+        )
+    )
+    return [
+        chunk.model_copy(update={"rank": rank})
+        for rank, chunk in enumerate(chunks, start=1)
+    ]

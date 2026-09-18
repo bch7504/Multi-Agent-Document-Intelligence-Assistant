@@ -11,8 +11,9 @@ from backend.app.rag.hybrid_search import (
 
 class RecordingVectorStore:
     def __init__(self):
-        self.query = None
+        self.query_text = None
         self.kwargs = None
+        self.query_rows = []
         self.collection_name = "document_chunks"
         self.client = self
         self.embeddings = self
@@ -26,11 +27,15 @@ class RecordingVectorStore:
         self.kwargs = kwargs
         return []
 
+    def query(self, **kwargs):
+        self.kwargs = kwargs
+        return self.query_rows
+
     def _parse_documents_from_search_results(self, results):
         return []
 
     def similarity_search(self, query, **kwargs):
-        self.query = query
+        self.query_text = query
         self.kwargs = kwargs
         return []
 
@@ -52,7 +57,7 @@ class HybridSearchTests(unittest.TestCase):
 
         retriever.invoke_scoped("What is RAG?", [document_id])
 
-        self.assertEqual(vectorstore.query, "What is RAG?")
+        self.assertEqual(vectorstore.query_text, "What is RAG?")
         self.assertEqual(vectorstore.kwargs["k"], 20)
         self.assertEqual(vectorstore.kwargs["ranker_type"], "rrf")
         self.assertEqual(vectorstore.kwargs["ranker_params"], {"k": 60})
@@ -80,6 +85,35 @@ class HybridSearchTests(unittest.TestCase):
                 else:
                     self.assertIsNone(vectorstore.embedded_query)
                     self.assertEqual(vectorstore.kwargs["data"], ["query"])
+
+    def test_full_document_load_uses_scalar_query_and_source_order(self):
+        vectorstore = RecordingVectorStore()
+        document_id = uuid4()
+        vectorstore.query_rows = [
+            {
+                "text": "Second",
+                "document_id": str(document_id),
+                "chunk_id": str(uuid4()),
+                "chunk_index": 1,
+                "source_name": "guide.pdf",
+            },
+            {
+                "text": "First",
+                "document_id": str(document_id),
+                "chunk_id": str(uuid4()),
+                "chunk_index": 0,
+                "source_name": "guide.pdf",
+            },
+        ]
+        retriever = MilvusHybridRetriever(vectorstore)
+
+        documents = retriever.invoke_all_scoped([document_id])
+
+        self.assertEqual([document.page_content for document in documents], ["First", "Second"])
+        self.assertEqual(
+            vectorstore.kwargs["filter"],
+            f'document_id in ["{document_id}"]',
+        )
 
     def test_unknown_profile_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "Unknown retrieval profile"):

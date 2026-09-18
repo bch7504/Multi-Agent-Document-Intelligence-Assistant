@@ -6,6 +6,8 @@ from enum import Enum
 from typing import Any, Iterable
 from uuid import UUID
 
+from langchain_core.documents import Document
+
 from backend.app.services.indexing import (
     DENSE_VECTOR_FIELD,
     SPARSE_VECTOR_FIELD,
@@ -16,6 +18,19 @@ from backend.app.services.indexing import (
 DEFAULT_MILVUS_URI = "http://localhost:19530"
 DEFAULT_RETRIEVAL_CANDIDATES = 20
 DEFAULT_RRF_K = 60
+DEFAULT_FULL_DOCUMENT_MAX_CHUNKS = 5_000
+DOCUMENT_QUERY_FIELDS = [
+    "text",
+    "document_id",
+    "chunk_id",
+    "chunk_index",
+    "page_number",
+    "start_index",
+    "source",
+    "source_name",
+    "doc_name",
+    "title",
+]
 
 
 class RetrievalProfile(str, Enum):
@@ -125,6 +140,53 @@ class MilvusHybridRetriever:
 
     def invoke_scoped(self, query: str, document_ids):
         return self._search(query, document_ids=document_ids)
+
+    def invoke_all_scoped(self, document_ids):
+        """Load complete documents in their original chunk order, without ANN search."""
+        document_ids = tuple(document_ids)
+        expression = _document_filter(document_ids)
+        if not expression:
+            return []
+        max_chunks = _positive_int_env(
+            "SUMMARY_FULL_DOCUMENT_MAX_CHUNKS",
+            DEFAULT_FULL_DOCUMENT_MAX_CHUNKS,
+        )
+        rows = self.vectorstore.client.query(
+            collection_name=self.vectorstore.collection_name,
+            filter=expression,
+            output_fields=DOCUMENT_QUERY_FIELDS,
+            limit=max_chunks + 1,
+        )
+        if len(rows) > max_chunks:
+            raise ValueError(
+                "Selected documents exceed SUMMARY_FULL_DOCUMENT_MAX_CHUNKS="
+                f"{max_chunks}; raise the limit explicitly to summarize all content"
+            )
+
+        document_order = {
+            str(document_id): index for index, document_id in enumerate(document_ids)
+        }
+
+        def order_key(row: dict[str, Any]) -> tuple[int, int, int, int]:
+            return (
+                document_order.get(str(row.get("document_id")), len(document_order)),
+                int(row.get("chunk_index") or 0),
+                int(row.get("page_number") or 0),
+                int(row.get("start_index") or 0),
+            )
+
+        documents: list[Document] = []
+        for row in sorted(rows, key=order_key):
+            content = str(row.get("text") or "").strip()
+            if not content:
+                continue
+            metadata = {
+                field: row[field]
+                for field in DOCUMENT_QUERY_FIELDS
+                if field != "text" and row.get(field) is not None
+            }
+            documents.append(Document(page_content=content, metadata=metadata))
+        return documents
 
 
 def get_retriever(

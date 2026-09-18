@@ -4,6 +4,7 @@ import { QuizPanel } from "../quiz/QuizPanel";
 import { CitationList } from "./CitationList";
 
 const taskCopy: Record<AssistantTask, { label: string; hint: string; icon: string }> = {
+  auto: { label: "Auto", hint: "Ask, summarize, or request a quiz", icon: "✦" },
   qa: { label: "Ask", hint: "Ask a grounded question", icon: "?" },
   summary: { label: "Summarize", hint: "Summarize selected documents", icon: "≡" },
   quiz: { label: "Quiz", hint: "Create a knowledge check", icon: "✓" },
@@ -21,6 +22,8 @@ interface Props {
   onSubmit: () => void;
   onReset: () => void;
   onOpenModels: () => void;
+  onOpenHistory: () => void;
+  onOpenQuizzes: () => void;
 }
 
 export function ChatWorkspace(props: Props) {
@@ -30,6 +33,12 @@ export function ChatWorkspace(props: Props) {
       <header className="workspace-header">
         <div><span className="eyebrow">Grounded workspace</span><h1>Research with your documents</h1></div>
         <div className="workspace-actions">
+          <button className="workspace-tool" type="button" onClick={props.onOpenHistory} aria-label="Open chat history">
+            <span>◷</span><b>History</b>
+          </button>
+          <button className="workspace-tool" type="button" onClick={props.onOpenQuizzes} aria-label="Open quiz library">
+            <span>✓</span><b>Quizzes</b>
+          </button>
           <button className="model-config-button" type="button" onClick={props.onOpenModels} disabled={!props.models} aria-label="Choose chat and embedding models">
             <span className="model-live-dot" />
             <span className="model-button-copy">
@@ -52,9 +61,9 @@ export function ChatWorkspace(props: Props) {
             <h2>Turn your documents into answers.</h2>
             <p>Select one or more ready documents, then ask a question, request a summary, or generate a grounded quiz.</p>
             <div className="suggestions">
-              {["What are the key findings?", "Summarize the main arguments", "Create a 5-question quiz"].map((text, index) => (
+              {["What are the key findings?", "Summarize the main arguments", "Create a 5-question quiz"].map((text) => (
                 <button key={text} type="button" onClick={() => {
-                  props.onTask(index === 1 ? "summary" : index === 2 ? "quiz" : "qa");
+                  props.onTask("auto");
                   props.onMessage(text);
                 }}>{text}<span>↗</span></button>
               ))}
@@ -63,9 +72,8 @@ export function ChatWorkspace(props: Props) {
         )}
         {props.entries.map((entry) => (
           <article className={`message ${entry.role}`} key={entry.id}>
-            <div className="avatar">{entry.role === "user" ? "YOU" : "A"}</div>
+            <div className="avatar" aria-hidden="true">{entry.role === "user" ? "U" : "A"}</div>
             <div className="message-content">
-              <span className="message-author">{entry.role === "user" ? "You" : "Atlas"}</span>
               <p>{entry.text}</p>
               {entry.result?.quiz && <QuizPanel questions={entry.result.quiz.questions} />}
               {entry.result && !entry.result.quiz && <CitationList citations={entry.result.citations} />}
@@ -102,7 +110,11 @@ export function ChatWorkspace(props: Props) {
           />
           <button type="button" disabled={!canSubmit} onClick={props.onSubmit} aria-label="Send request">↑</button>
         </div>
-        <p className="composer-note">Answers are generated only from selected evidence. Verify critical information.</p>
+        <p className="composer-note">
+          {props.task === "auto"
+            ? "Auto routes your request to Ask, Summarize, or Quiz. Answers use only selected evidence."
+            : "Answers are generated only from selected evidence. Verify critical information."}
+        </p>
       </footer>
     </main>
   );

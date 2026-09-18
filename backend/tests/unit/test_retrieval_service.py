@@ -3,7 +3,11 @@ from uuid import uuid4
 
 from langchain_core.documents import Document
 
-from backend.app.services.retrieval import normalize_document, retrieve_chunks
+from backend.app.services.retrieval import (
+    normalize_document,
+    retrieve_chunks,
+    retrieve_document_chunks,
+)
 
 
 class RecordingRetriever:
@@ -23,6 +27,16 @@ class ScopedRetriever(RecordingRetriever):
 
     def invoke_scoped(self, query, document_ids):
         self.query = query
+        self.document_ids = document_ids
+        return self.documents
+
+
+class FullDocumentRetriever(RecordingRetriever):
+    def __init__(self, documents):
+        super().__init__(documents)
+        self.document_ids = None
+
+    def invoke_all_scoped(self, document_ids):
         self.document_ids = document_ids
         return self.documents
 
@@ -103,6 +117,37 @@ class RetrievalServiceTests(unittest.TestCase):
 
         self.assertEqual(retriever.document_ids, (allowed_id,))
         self.assertEqual([item.content for item in chunks], ["Allowed"])
+
+    def test_full_document_chunks_are_loaded_and_sorted_by_source_order(self):
+        document_id = uuid4()
+        retriever = FullDocumentRetriever(
+            [
+                Document(
+                    page_content="Second",
+                    metadata={
+                        "document_id": str(document_id),
+                        "chunk_id": str(uuid4()),
+                        "chunk_index": 1,
+                        "source_name": "guide.pdf",
+                    },
+                ),
+                Document(
+                    page_content="First",
+                    metadata={
+                        "document_id": str(document_id),
+                        "chunk_id": str(uuid4()),
+                        "chunk_index": 0,
+                        "source_name": "guide.pdf",
+                    },
+                ),
+            ]
+        )
+
+        chunks = retrieve_document_chunks(retriever, [document_id])
+
+        self.assertEqual(retriever.document_ids, (document_id,))
+        self.assertEqual([chunk.content for chunk in chunks], ["First", "Second"])
+        self.assertEqual([chunk.rank for chunk in chunks], [1, 2])
 
 
 if __name__ == "__main__":

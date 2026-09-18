@@ -25,9 +25,19 @@ but the response is unsupported, incomplete, or malformed.
 
 
 def build_review_prompt(state: AssistantGraphState) -> str:
+    cited_ids = set(state.get("cited_chunk_ids", []))
+    if str(getattr(state.get("resolved_task"), "value", state.get("resolved_task"))) == "summary":
+        cited_ids.update(
+            chunk_id
+            for draft in state.get("map_drafts", [])
+            for chunk_id in draft.cited_chunk_ids
+        )
+    review_chunks = [
+        chunk for chunk in state["chunks"] if chunk.chunk_id in cited_ids
+    ] or state["chunks"]
     evidence = "\n\n".join(
         f'<evidence chunk_id="{chunk.chunk_id}">\n{chunk.content}\n</evidence>'
-        for chunk in state["chunks"]
+        for chunk in review_chunks
     )
     quiz = state.get("quiz")
     quiz_payload = (

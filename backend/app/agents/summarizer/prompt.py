@@ -17,7 +17,8 @@ def build_summary_map_prompt(focus: str, evidence: str) -> str:
     return (
         f"Summary focus:\n{focus.strip()}\n\n"
         f"Evidence batch:\n{evidence}\n\n"
-        "Produce a concise partial summary and its supporting chunk IDs."
+        "Cover every major point in this batch, remove repetition, and produce "
+        "a concise partial summary with only its directly supporting chunk IDs."
     )
 
 
@@ -31,5 +32,6 @@ def build_summary_reduce_prompt(
         f"Summary focus:\n{focus.strip()}\n\n"
         f"Partial summaries:\n{partial_summaries}\n\n"
         f"{retry}\n"
-        "Produce the final grounded summary and supporting chunk IDs."
+        "Produce a concise, well-structured final summary that covers the major "
+        "points across all partial summaries and return supporting chunk IDs."
     )

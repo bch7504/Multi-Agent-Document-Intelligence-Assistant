@@ -1,4 +1,5 @@
-export type AssistantTask = "qa" | "summary" | "quiz";
+export type ResolvedAssistantTask = "qa" | "summary" | "quiz";
+export type AssistantTask = "auto" | ResolvedAssistantTask;
 export type DocumentStatus = "uploaded" | "processing" | "ready" | "failed";
 export type ModelProvider = "openrouter" | "openai" | "gemini" | "ollama";
 
@@ -26,6 +27,17 @@ export interface ModelCatalog {
   activeEmbedding: ModelChoice;
   providers: ProviderCatalog[];
   embeddingChangeRequiresReindex: boolean;
+}
+
+export interface ModelCheckResult {
+  usable: boolean;
+  message: string;
+}
+
+export interface ModelValidationResponse {
+  usable: boolean;
+  chat: ModelCheckResult;
+  embedding: ModelCheckResult;
 }
 
 export interface DocumentItem {
@@ -88,7 +100,7 @@ export interface QuizQuestion {
 
 export interface AssistantResponse {
   runId: string;
-  task: AssistantTask;
+  task: ResolvedAssistantTask;
   answer: string;
   citations: Citation[];
   quiz: { questions: QuizQuestion[] } | null;
@@ -111,4 +123,77 @@ export interface ChatEntry {
   text: string;
   task?: AssistantTask;
   result?: AssistantResponse;
+}
+
+export interface ConversationSummary {
+  id: string;
+  title: string | null;
+  messageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversationListResponse {
+  items: ConversationSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ConversationMessage {
+  id: string;
+  conversationId: string;
+  role: "user" | "assistant";
+  content: string;
+  task: AssistantTask | null;
+  createdAt: string;
+}
+
+export interface ConversationMessageList {
+  items: ConversationMessage[];
+  total: number;
+}
+
+export interface QuizLibraryItem {
+  id: string;
+  runId: string;
+  conversationId: string;
+  title: string;
+  questionCount: number;
+  attemptCount: number;
+  bestScorePercent: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QuizListResponse {
+  items: QuizLibraryItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface SavedQuiz {
+  id: string;
+  runId: string;
+  conversationId: string;
+  title: string;
+  questions: QuizQuestion[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QuizAttempt {
+  id: string;
+  quizId: string;
+  answers: Record<string, string>;
+  correctCount: number;
+  totalQuestions: number;
+  scorePercent: number;
+  createdAt: string;
+}
+
+export interface QuizAttemptList {
+  items: QuizAttempt[];
+  total: number;
 }

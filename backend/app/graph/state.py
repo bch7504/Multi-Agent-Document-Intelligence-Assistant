@@ -38,6 +38,7 @@ class AssistantGraphState(TypedDict, total=False):
     cited_chunk_ids: list[UUID]
     map_drafts: list[SummaryMapDraft]
     quiz_draft: QuizDraft
+    quiz_question_count: int
     quiz: QuizResult
     citations: list[Citation]
     validation_passed: bool
