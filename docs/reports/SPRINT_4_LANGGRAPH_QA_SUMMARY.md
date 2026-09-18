@@ -73,3 +73,14 @@ The response contains `runId`, resolved `task`, `answer`, verified `citations`,
 
 - Persistent conversations, messages, runs, and checkpoints in PostgreSQL.
 - Quiz generation, LLM reviewer, bounded retry, and expanded guardrails.
+
+## Current addendum (2026-09-18)
+
+Sprint 5 added Quiz and the common reviewer/retry path. Sprint 8 extended `auto`
+routing to all three tasks (`qa`, `summary`, `quiz`) and made Auto the default in
+the production frontend while retaining explicit task tabs as overrides.
+
+Selected-document Summary no longer summarizes only top retrieval hits. It loads
+all indexed chunks for the selected documents in source order, then chooses a
+single-pass or bounded map/reduce strategy from the context size. A live one-document
+Security summary loaded all 19 chunks, returned 17 scoped citations, and passed review.

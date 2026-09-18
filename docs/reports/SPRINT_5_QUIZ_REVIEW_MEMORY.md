@@ -60,3 +60,14 @@ Migration `20260917_0002` tạo:
 Sprint này hoàn thiện short-term conversational memory bền vững và run audit.
 Semantic user memory/long-term preference extraction chưa được bật; phần đó chỉ
 nên thêm khi có use case, consent và chính sách retention rõ ràng.
+
+## Cập nhật hiện tại (2026-09-18)
+
+- Quiz đọc số câu từ prompt bằng chữ số hoặc các từ số thông dụng tiếng Việt/Anh;
+  mặc định 5 câu và giới hạn 20 câu.
+- Validator yêu cầu output có đúng số câu đã requested trước khi reviewer chạy.
+- Quiz được lưu vào Quiz Library và hỗ trợ nhiều attempt từ Sprint 7.
+- Live Auto smoke test với một tài liệu `Knowledge Bases` tạo đúng 2 câu, reviewer
+  `pass` và hoàn tất khoảng 8,8 giây.
+- Một prompt 3 câu Security rộng đã bị chặn sau hai retry do citation của một số câu
+  không khớp excerpt. Đây là fail-closed đúng thiết kế, không được ghi nhận là quiz đạt.

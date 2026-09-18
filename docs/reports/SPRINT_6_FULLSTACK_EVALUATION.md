@@ -72,3 +72,15 @@ Langfuse SaaS. Có thể thêm OpenTelemetry/Langfuse exporter sau mà không th
 - Live OpenRouter QA: reviewer PASS, 3 citations, 7 trace steps và 5,785 tokens
   được ghi nhận (5,387 input, 398 output).
 - Full RAGAS 3-case run: PASS, report đã lưu.
+
+## Cập nhật frontend/model runtime (2026-09-18)
+
+- Auto là chế độ mặc định; Ask, Summarize và Quiz vẫn là manual overrides.
+- Model modal cho phép chọn/nhập model từ mọi provider trong catalog, sau đó dùng
+  **Apply & test** để backend gọi thử chat completion và embedding query thật.
+- Lựa chọn không dùng được không thay thế cấu hình đang chạy; lỗi được trả về ở dạng
+  an toàn và không chứa API key.
+- Live validation của cấu hình hiện tại đã pass cho cả chat và embedding; embedding
+  trả 1.536 dimensions trong khoảng 3,8 giây.
+- Nginx dùng `no-store` cho SPA để tránh browser giữ bundle cũ sau khi rebuild.
+- Upload UI, API và proxy đã được đồng bộ ở giới hạn 75 MiB.

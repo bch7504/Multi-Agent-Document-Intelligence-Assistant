@@ -9,7 +9,7 @@ Run date: 2026-09-16
 - `documents` table for upload metadata, status, checksum, page/chunk counts,
   embedding model, safe error message, and timestamps.
 - Local-volume PDF storage with path containment, streaming SHA-256 checksum,
-  PDF signature validation, and a 25 MiB default size limit.
+  PDF signature validation, and an initial 25 MiB default size limit.
 - Page-preserving PDF parsing and token-aware chunks carrying stable
   `document_id`, `chunk_id`, and one-based `page_number` metadata.
 - Shared Milvus `document_chunks` collection with append and delete operations
@@ -38,3 +38,16 @@ Run date: 2026-09-16
 The MVP processes uploads synchronously. A successful response is `ready`; a
 parse or index failure is persisted as `failed` with a safe message suitable for
 the UI. Background jobs and retry scheduling remain V2 work.
+
+## Current addendum (2026-09-18)
+
+- The configured limit is now 75 MiB (`78,643,200` bytes) in the frontend,
+  FastAPI, Docker configuration, and Nginx; Nginx allows 76 MiB for multipart overhead.
+- A 69.89 MiB text PDF was parsed successfully in a direct parser check (46 pages;
+  text found on 9 of the first 10 sampled pages). Full indexing was not used as a
+  latency test because ingestion is still synchronous.
+- A 51.2 MiB scanned PDF reached the API successfully and was persisted as `failed`
+  with `PDF does not contain extractable text`. This confirms lifecycle/error handling,
+  not OCR support.
+- The frontend now shows file size and backend error details instead of only a generic
+  `Request failed` message.

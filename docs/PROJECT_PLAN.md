@@ -29,20 +29,28 @@ Project được phát triển tăng dần từ baseline đang chạy. Không vi
 - LangGraph QA, map-reduce Summary và Quiz dùng chung deterministic validator.
 - Grounding reviewer với retry về retrieval/generation, tối đa hai lần.
 - PostgreSQL recent-window memory và assistant run audit.
-- React/TypeScript frontend production nối FastAPI qua Nginx.
-- RAGAS versioned benchmark, structured logs, token usage và run audit endpoint.
-- Full-stack Docker Compose và CI cho backend/frontend.
+- Conversation History, Quiz Library, quiz attempts và quản lý thread.
 - Gemini, OpenRouter, OpenAI và Ollama chat providers.
-- Unit/smoke tests không yêu cầu dịch vụ bên ngoài.
+- React/TypeScript production frontend, Nginx reverse proxy và Docker Compose full stack.
+- Model catalog cùng thao tác **Apply & test** gọi thử chat/embedding model thật từ backend.
+- Retrieval benchmark, RAGAS smoke evaluation, structured logs, request ID và Agent Trace.
+- Curated demo corpus gồm 5 tài liệu độc lập, tổng 65 chunks.
+- Unit/integration tests không yêu cầu dịch vụ bên ngoài cho phần lớn test suite.
 
 ### Chưa có
 
-- Authentication/multi-tenant, OCR, DOCX/PPTX và semantic long-term memory thuộc V2.
+- OCR cho PDF scan/ảnh.
+- Background queue cho ingestion tài liệu lớn; MVP hiện xử lý đồng bộ.
+- Authentication, multi-tenant authorization và retention policy theo người dùng.
+- Semantic long-term user memory/profile.
+- Object storage production và distributed tracing exporter.
 
 ### Hạn chế cần xử lý
 
 - Benchmark `v2` đã có 20 gold qrels thủ công và 20 silver cases bám theo các năng lực của Document Assistant; cần tiếp tục bổ sung gold qrels cho PDF người dùng tải lên.
-- Người dùng chọn trực tiếp tên collection; cách này không phù hợp với document lifecycle.
+- Bộ RAGAS hiện chỉ có 3 gold-reference cases, phù hợp smoke regression nhưng chưa đủ làm quality gate production.
+- PDF lớn có lớp text được hỗ trợ tới 75 MiB, nhưng thời gian parse/embed phụ thuộc provider và vẫn nằm trong một request đồng bộ.
+- `frontend/mock.html` chỉ là prototype tĩnh; frontend production nằm trong `frontend/src`.
 - Memory hiện là recent conversation window; chưa có semantic long-term user memory.
 
 ## 3. Nguyên tắc thiết kế
@@ -52,7 +60,7 @@ Project được phát triển tăng dần từ baseline đang chạy. Không vi
 3. Dùng một collection chunk dùng chung; lọc bằng `document_id`, không tạo collection cho từng tài liệu.
 4. Milvus là retrieval store; PostgreSQL là control plane cho tài liệu, hội thoại và run.
 5. Web frontend production chỉ giao tiếp với FastAPI; không import hoặc sao chép domain logic từ Python.
-6. Các task rõ ràng từ UI được route trực tiếp; chỉ dùng supervisor khi `task=auto`.
+6. UI mặc định dùng `task=auto` để supervisor nhận diện QA/Summary/Quiz; các tab thủ công vẫn cho phép ép task rõ ràng.
 7. Summary và Quiz là specialist workflow. Chỉ coi một component là agent khi nó thực sự có quyền chọn/gọi tool.
 8. Validation xác định được bằng code phải chạy trước LLM reviewer.
 9. Mọi retry trong graph đều có giới hạn.
@@ -288,6 +296,8 @@ START
 | Sprint 4 - LangGraph | Bắt buộc | Bắt buộc | Xác thực document scope trong PostgreSQL, truy xuất context từ Milvus; checkpoint tạm thời nằm trong process. |
 | Sprint 5 - Memory/review | Bắt buộc | Bắt buộc | Persistent messages, review result, retry và audit trail. |
 | Sprint 6 - Deploy/evaluation | Bắt buộc | Bắt buộc | Full-stack runtime, evaluation records và observability metadata. |
+| Sprint 7 - History/Quiz Library | Bắt buộc | Không đổi | PostgreSQL lưu thread, message, quiz và attempt; Milvus vẫn chỉ phục vụ retrieval. |
+| Sprint 8 - Demo hardening | Bắt buộc | Bắt buộc | Kiểm chứng selected-document scope, model runtime và luồng upload/retrieval thật. |
 
 Quyết định lưu trữ:
 
@@ -320,12 +330,13 @@ Quyết định lưu trữ:
 - [x] Thêm shared collection `document_chunks`, append/delete theo `document_id` và readiness check.
 - [x] Thêm integration test upload/list/get/delete với indexer giả lập; toàn bộ 58 test đạt.
 - [x] Chạy live PostgreSQL, migration, FastAPI và Milvus; liveness/readiness đều đạt.
-- [ ] Chạy upload end-to-end với một PDF thật khi có file kiểm thử được chọn.
+- [x] Kiểm chứng parser với PDF text thật 69,89 MiB; upload scan 51,2 MiB được nhận nhưng chuyển `failed` an toàn vì chưa có OCR.
 - [x] Hoàn tất Sprint 3 cho corpus hiện tại: profiles, query rewrite, 40-case benchmark và báo cáo so sánh.
 - [x] Hoàn tất Sprint 4: LangGraph QA/Summary, structured auto routing, checkpointer theo conversation, unified API và trace; toàn bộ 74 test đạt.
 - [x] Hoàn tất Sprint 5: Quiz, deterministic validation, LLM reviewer, bounded retry, PostgreSQL conversation memory và input guardrails; toàn bộ 80 test đạt.
-- [x] Hoàn tất Sprint 6: React frontend thật, audit observability, token usage, RAGAS versioned benchmark, full-stack Docker Compose và CI.
-- [x] Đồng bộ model selector trên FE thật với backend catalog; chat model theo request, embedding model theo index và không lộ API key.
+- [x] Hoàn tất Sprint 6: React frontend, Docker full stack, model selector, observability và RAGAS baseline.
+- [x] Hoàn tất Sprint 7: History, quản lý thread, Quiz Library và quiz attempts bền vững.
+- [x] Hoàn tất Sprint 8: curated 5-document corpus, full-document Summary, Auto routing, quiz theo số câu, upload 75 MiB và kiểm tra model thật.
 
 ## 9. Roadmap triển khai
 
@@ -444,21 +455,42 @@ Mục tiêu: tạo bản demo portfolio có thể chạy lại và giải thích
 
 Công việc:
 
-- [x] Tích hợp tracing backend tương đương bằng PostgreSQL audit và structured JSON logs.
-- [x] Ghi trace node, chunks, token, latency, lỗi và retry.
-- [x] Chạy RAGAS trên benchmark; lưu config và kết quả có version.
-- [x] Xây React/TypeScript frontend từ API contract; giữ mock HTML làm tham chiếu độc lập.
-- [x] UI upload, chọn nhiều document, Ask/Summarize/Quiz và xem citation.
-- [x] Trang/expander Agent Trace.
-- [x] Docker Compose cho API, UI, PostgreSQL và Milvus.
-- [x] README gồm kiến trúc, trade-off, benchmark và demo scenario.
+- Tích hợp Langfuse hoặc tracing backend tương đương.
+- Ghi trace node, tool call, chunks, token, latency, lỗi và retry.
+- Chạy RAGAS trên benchmark; lưu config và kết quả có version.
+- Xây React/TypeScript frontend từ API contract; dùng mock HTML hiện tại làm tham chiếu giao diện.
+- UI upload, chọn nhiều document, Ask/Summarize/Quiz và xem citation.
+- Trang/expander Agent Trace.
+- Docker Compose cho API, UI, PostgreSQL và Milvus.
+- README gồm kiến trúc, trade-off, benchmark và demo scenario.
 
 Definition of Done:
 
-- [x] Clone repo, cấu hình `.env` và chạy được bằng Docker Compose.
-- [x] Demo đầy đủ upload -> QA/Summary/Quiz -> citation -> trace.
-- [x] Evaluation có thể chạy lại bằng một command.
-- [x] README đủ để người phỏng vấn hiểu quyết định kỹ thuật chính.
+- Clone repo, cấu hình `.env` và chạy được bằng Docker Compose.
+- Demo đầy đủ upload -> QA/Summary/Quiz -> citation -> trace.
+- Evaluation có thể chạy lại bằng một command.
+- README đủ để người phỏng vấn hiểu quyết định kỹ thuật chính.
+
+### Sprint 7 - History và Quiz Library
+
+Mục tiêu: biến conversation và quiz thành dữ liệu người dùng có thể xem, làm lại và quản lý.
+
+- [x] List/load/rename/delete conversation và khôi phục message sau reload.
+- [x] Lưu quiz thành entity riêng, hỗ trợ attempt, chấm điểm và best score.
+- [x] Cascade dữ liệu liên quan khi xóa conversation.
+- [x] Tích hợp History và Quiz Library vào frontend thật.
+
+### Sprint 8 - Demo hardening và selected-document workflows
+
+Mục tiêu: làm cho bản demo ổn định, phản ánh đúng phạm vi tài liệu người dùng chọn.
+
+- [x] Tách dataset nguồn thành 5 document records với 65 chunks.
+- [x] Summary tải toàn bộ chunks của tài liệu được chọn theo thứ tự nguồn, không đọc cả knowledge base.
+- [x] Auto routing hỗ trợ QA, Summary và Quiz; tab thủ công vẫn là override.
+- [x] Quiz đọc số câu từ yêu cầu, mặc định 5 và giới hạn tối đa 20.
+- [x] Đồng bộ giới hạn upload FE/API/Nginx ở 75 MiB và trả lỗi scan PDF rõ ràng.
+- [x] Cho chọn mọi provider/model trong catalog rồi **Apply & test** bằng request thật.
+- [x] Loại cache SPA cũ và tinh gọn message UI.
 
 ## 10. Cấu trúc source mục tiêu
 
@@ -503,8 +535,8 @@ Definition of Done:
 |   |   |-- services/
 |   |   |-- database/
 |   |   |-- guardrails/
-|   |   |-- evaluation/
-|   |   `-- core/
+|   |   |-- en/
+|   |   `-- core/valuatio
 |   |-- alembic/
 |   |-- tests/
 |   |-- requirements.txt
@@ -537,7 +569,7 @@ Code sẽ được chuyển theo từng vertical slice. Chỉ xóa compatibility
 - `docx.py` và `pptx.py` thuộc V2; MVP ưu tiên PDF và URL ingestion.
 - Backend dùng `assistant/runs` làm contract chính; có thể expose `chat.py` như adapter, không để chat transport quyết định graph design.
 - Chỉ retrieval agent có `agent.py` và `prompt.py` ở hiện tại. Các agent khác chỉ có package marker cho đến khi có implementation và test.
-- Dockerfile, React package, FastAPI entrypoint và CI đều thuộc runnable vertical slice; không giữ placeholder không chạy được.
+- `Dockerfile`, React `package.json`, FastAPI `main.py` và `ci.yml` sẽ được thêm cùng runnable vertical slice tương ứng, không tạo placeholder không chạy được.
 
 ### MVP
 
@@ -558,6 +590,7 @@ Code sẽ được chuyển theo từng vertical slice. Chỉ xóa compatibility
 - Long-term user memory.
 - Background worker/queue quy mô lớn.
 - Advanced reranking.
+- Object storage và background OCR/ingestion workers.
 
 ## 12. Chất lượng và quy tắc hoàn thành chung
 
@@ -572,11 +605,11 @@ Một tính năng chỉ được coi là hoàn thành khi:
 - phiên bản cũ vẫn chạy hoặc đã có migration được kiểm chứng;
 - có log/trace đủ để chẩn đoán lỗi production.
 
-## 13. Thứ tự thực hiện ngay
+## 13. Ưu tiên tiếp theo
 
-1. Scaffold package theo cấu trúc mới.
-2. Định nghĩa retrieval/citation schemas.
-3. Viết adapter quanh retriever hiện tại để trả structured chunks.
-4. Thêm citation vào baseline chat.
-5. Tạo benchmark nhỏ và ghi kết quả baseline.
-6. Sau đó mới bắt đầu FastAPI và PDF ingestion.
+1. Thêm OCR và background job để upload lớn không giữ request HTTP quá lâu.
+2. Mở rộng RAGAS/gold set cho từng loại tài liệu và dùng threshold làm regression gate.
+3. Thêm authentication, `user_id` và authorization filter trước khi triển khai nhiều người dùng.
+4. Đánh giá reranker trên benchmark hiện tại; chỉ bật khi chất lượng tăng đủ bù latency/cost.
+5. Chuyển file storage sang object storage và bổ sung backup/retention policy.
+6. Thiết kế semantic long-term memory sau khi có consent và chính sách xóa dữ liệu.
